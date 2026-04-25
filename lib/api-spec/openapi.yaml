@@ -3,13 +3,43 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: BCA Entertainment Works ERP API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: users
+    description: User management
+  - name: departments
+    description: Department management
+  - name: dashboard
+    description: Dashboard summary
+  - name: leads
+    description: Lead management
+  - name: proposals
+    description: Proposal management
+  - name: work-orders
+    description: Work order management
+  - name: purchase-orders
+    description: Purchase order management
+  - name: inventory
+    description: Inventory management
+  - name: bom
+    description: Bill of Materials
+  - name: attendance
+    description: Employee attendance
+  - name: payroll
+    description: Payroll management
+  - name: gst-invoices
+    description: GST invoice management
+  - name: service-orders
+    description: Service order management
+  - name: approvals
+    description: Approval workflow
 paths:
   /healthz:
     get:
@@ -24,6 +54,1927 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users:
+    get:
+      operationId: getUsers
+      tags: [users]
+      summary: List users
+      parameters:
+        - name: department
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}/deactivate:
+    patch:
+      operationId: deactivateUser
+      tags: [users]
+      summary: Deactivate user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordBody"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /departments:
+    get:
+      operationId: getDepartments
+      tags: [departments]
+      summary: List departments
+      responses:
+        "200":
+          description: Department list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DepartmentRecord"
+
+  /leads:
+    get:
+      operationId: getLeads
+      tags: [leads]
+      summary: List leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: assignedToId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadBody"
+      responses:
+        "201":
+          description: Created lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/funnel/stats:
+    get:
+      operationId: getLeadFunnelStats
+      tags: [leads]
+      summary: Get lead funnel stage counts
+      responses:
+        "200":
+          description: Funnel stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FunnelStat"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get lead by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLeadBody"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /proposals:
+    get:
+      operationId: getProposals
+      tags: [proposals]
+      summary: List proposals
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: salespersonId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Proposal list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Proposal"
+    post:
+      operationId: createProposal
+      tags: [proposals]
+      summary: Create proposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProposalBody"
+      responses:
+        "201":
+          description: Created proposal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+
+  /proposals/cleanup/lost:
+    post:
+      operationId: cleanupLostProposals
+      tags: [proposals]
+      summary: Delete lost proposals older than 90 days
+      responses:
+        "200":
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupResult"
+
+  /proposals/{id}/won:
+    post:
+      operationId: markProposalWon
+      tags: [proposals]
+      summary: Mark proposal as Won and return work order stub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Proposal marked won with work order stub
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkWonResult"
+
+  /proposals/{id}:
+    get:
+      operationId: getProposal
+      tags: [proposals]
+      summary: Get proposal by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Proposal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+    patch:
+      operationId: updateProposal
+      tags: [proposals]
+      summary: Update proposal (including status transitions)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProposalBody"
+      responses:
+        "200":
+          description: Updated proposal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+    delete:
+      operationId: deleteProposal
+      tags: [proposals]
+      summary: Delete proposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /work-orders:
+    get:
+      operationId: getWorkOrders
+      tags: [work-orders]
+      summary: List work orders
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Work order list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkOrder"
+    post:
+      operationId: createWorkOrder
+      tags: [work-orders]
+      summary: Create a work order (optionally from a proposal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkOrderBody"
+      responses:
+        "201":
+          description: Created work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}:
+    get:
+      operationId: getWorkOrder
+      tags: [work-orders]
+      summary: Get work order by id (with items, POs, subcontracts, delivery)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Work order detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+    patch:
+      operationId: updateWorkOrder
+      tags: [work-orders]
+      summary: Update work order status or notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkOrderBody"
+      responses:
+        "200":
+          description: Updated work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}/items/{itemId}:
+    patch:
+      operationId: updateWorkOrderItem
+      tags: [work-orders]
+      summary: Update work order item (workflow type, step, production note)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkOrderItemBody"
+      responses:
+        "200":
+          description: Updated work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}/subcontract:
+    post:
+      operationId: addSubcontract
+      tags: [work-orders]
+      summary: Add a subcontract record to a work order item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubcontractBody"
+      responses:
+        "201":
+          description: Updated work order with subcontract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}/delivery:
+    post:
+      operationId: upsertDelivery
+      tags: [work-orders]
+      summary: Create or update delivery record for a work order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertDeliveryBody"
+      responses:
+        "200":
+          description: Updated work order with delivery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}/invoice:
+    post:
+      operationId: generateInvoice
+      tags: [work-orders]
+      summary: Generate GST invoice for a work order (triggers Stock OUT)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateInvoiceResult"
+
+  /work-orders/{id}/items/{itemId}/finished-goods:
+    post:
+      operationId: markFinishedGoods
+      tags: [work-orders]
+      summary: Mark a manufacturing item as finished goods received
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated work order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /purchase-orders:
+    get:
+      operationId: getPurchaseOrders
+      tags: [purchase-orders]
+      summary: List purchase orders
+      parameters:
+        - name: workOrderId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Purchase order list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseOrder"
+    post:
+      operationId: createPurchaseOrder
+      tags: [purchase-orders]
+      summary: Create a purchase order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePurchaseOrderBody"
+      responses:
+        "201":
+          description: Created purchase order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/pending-my-approval:
+    get:
+      operationId: getPendingMyApproval
+      tags: [purchase-orders]
+      summary: Get POs pending the current user's approval
+      responses:
+        "200":
+          description: Pending PO list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/{id}:
+    get:
+      operationId: getPurchaseOrder
+      tags: [purchase-orders]
+      summary: Get purchase order by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+    patch:
+      operationId: updatePurchaseOrder
+      tags: [purchase-orders]
+      summary: Update purchase order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePurchaseOrderBody"
+      responses:
+        "200":
+          description: Updated purchase order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/{id}/approve:
+    post:
+      operationId: approvePurchaseOrder
+      tags: [purchase-orders]
+      summary: Approve a purchase order (manager/CFO required; CFO-only if price diff > 5%)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved PO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/{id}/reject:
+    post:
+      operationId: rejectPurchaseOrder
+      tags: [purchase-orders]
+      summary: Reject a purchase order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejectionNote:
+                  type: string
+      responses:
+        "200":
+          description: Rejected PO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/{id}/receive:
+    post:
+      operationId: receivePurchaseOrder
+      tags: [purchase-orders]
+      summary: Mark goods received for an approved PO (triggers Stock IN)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: PO marked received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /inventory/items:
+    get:
+      operationId: getInventoryItems
+      tags: [inventory]
+      summary: List inventory items with current stock balance
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Inventory item list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+    post:
+      operationId: createInventoryItem
+      tags: [inventory]
+      summary: Create an inventory item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInventoryItemBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+
+  /inventory/items/{id}:
+    get:
+      operationId: getInventoryItem
+      tags: [inventory]
+      summary: Get a single inventory item with stock balance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inventory item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+    patch:
+      operationId: updateInventoryItem
+      tags: [inventory]
+      summary: Update an inventory item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInventoryItemBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+
+  /inventory/items/{id}/ledger:
+    get:
+      operationId: getItemLedger
+      tags: [inventory]
+      summary: Get full stock ledger for an item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Stock ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockLedger"
+
+  /inventory/low-stock:
+    get:
+      operationId: getLowStockItems
+      tags: [inventory]
+      summary: Get items below reorder level
+      responses:
+        "200":
+          description: Low stock item list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+
+  /inventory/dashboard:
+    get:
+      operationId: getInventoryDashboard
+      tags: [inventory]
+      summary: Inventory dashboard summary with recent transactions
+      responses:
+        "200":
+          description: Inventory dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryDashboard"
+
+  /inventory/transactions:
+    post:
+      operationId: recordStockTransaction
+      tags: [inventory]
+      summary: Record a single stock IN or OUT transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStockTransactionBody"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockTransaction"
+
+  /inventory/transactions/bulk:
+    post:
+      operationId: recordBulkStockTransactions
+      tags: [inventory]
+      summary: Record multiple stock transactions at once (bulk IN/OUT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkStockTransactionBody"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockTransaction"
+
+  /bom:
+    get:
+      operationId: getBomList
+      tags: [bom]
+      summary: List all BOMs with line items
+      responses:
+        "200":
+          description: BOM list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BomTemplate"
+    post:
+      operationId: createBom
+      tags: [bom]
+      summary: Create a BOM for a finished goods item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBomBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomTemplate"
+
+  /bom/{id}:
+    get:
+      operationId: getBom
+      tags: [bom]
+      summary: Get a BOM by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: BOM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomTemplate"
+    patch:
+      operationId: updateBom
+      tags: [bom]
+      summary: Update a BOM (replaces all line items if provided)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBomBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomTemplate"
+    delete:
+      operationId: deleteBom
+      tags: [bom]
+      summary: Delete a BOM
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /employees:
+    get:
+      operationId: getEmployees
+      tags: [attendance]
+      summary: List employees
+      parameters:
+        - name: department
+          in: query
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Employee list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+    post:
+      operationId: createEmployee
+      tags: [attendance]
+      summary: Create an employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [attendance]
+      summary: Get employee with leave balances
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Employee detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeDetail"
+    patch:
+      operationId: updateEmployee
+      tags: [attendance]
+      summary: Update employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}/deactivate:
+    patch:
+      operationId: deactivateEmployee
+      tags: [attendance]
+      summary: Deactivate an employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}/leave-balances:
+    get:
+      operationId: getLeaveBalances
+      tags: [attendance]
+      summary: Get leave balances for an employee (current year)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leave balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveBalance"
+    post:
+      operationId: setLeaveBalance
+      tags: [attendance]
+      summary: Set leave balance for an employee (upsert)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetLeaveBalanceBody"
+      responses:
+        "200":
+          description: Updated balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveBalance"
+
+  /attendance:
+    get:
+      operationId: getAttendanceRecords
+      tags: [attendance]
+      summary: List attendance records
+      parameters:
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: string
+        - name: year
+          in: query
+          schema:
+            type: string
+        - name: date
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+    post:
+      operationId: markAttendance
+      tags: [attendance]
+      summary: Mark attendance for a single employee (upserts)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceBody"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/bulk:
+    post:
+      operationId: markBulkAttendance
+      tags: [attendance]
+      summary: Mark attendance for multiple employees on a date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkAttendanceBody"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/summary:
+    get:
+      operationId: getAttendanceSummary
+      tags: [attendance]
+      summary: Monthly attendance summary for all active employees
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceSummary"
+
+  /leave-requests:
+    get:
+      operationId: getLeaveRequests
+      tags: [attendance]
+      summary: List leave requests
+      parameters:
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Leave request list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveRequest"
+    post:
+      operationId: createLeaveRequest
+      tags: [attendance]
+      summary: Submit a leave request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeaveRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+
+  /leave-requests/{id}/approve:
+    patch:
+      operationId: approveLeaveRequest
+      tags: [attendance]
+      summary: Approve a leave request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+
+  /leave-requests/{id}/reject:
+    patch:
+      operationId: rejectLeaveRequest
+      tags: [attendance]
+      summary: Reject a leave request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejectionNote:
+                  type: string
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+
+  /payroll:
+    get:
+      operationId: getPayrollRecords
+      tags: [payroll]
+      summary: Monthly payroll summary for all active employees
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payroll records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PayrollRecord"
+
+  /gst-invoices:
+    get:
+      operationId: getGstInvoices
+      tags: [gst-invoices]
+      summary: List GST invoices
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: month
+          in: query
+          schema:
+            type: string
+        - name: year
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: GST invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GstInvoice"
+    post:
+      operationId: createGstInvoice
+      tags: [gst-invoices]
+      summary: Create GST invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGstInvoiceBody"
+      responses:
+        "201":
+          description: Created invoice with line items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GstInvoiceDetail"
+
+  /gst-invoices/report/ar-ageing:
+    get:
+      operationId: getArAgeing
+      tags: [gst-invoices]
+      summary: Accounts receivable ageing report
+      responses:
+        "200":
+          description: AR ageing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArAgeingReport"
+
+  /gst-invoices/{id}:
+    get:
+      operationId: getGstInvoice
+      tags: [gst-invoices]
+      summary: Get GST invoice by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice with line items and payments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GstInvoiceDetail"
+    patch:
+      operationId: updateGstInvoice
+      tags: [gst-invoices]
+      summary: Update invoice notes or due date
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                dueDate:
+                  type: string
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GstInvoice"
+
+  /gst-invoices/{id}/payments:
+    post:
+      operationId: recordInvoicePayment
+      tags: [gst-invoices]
+      summary: Record a payment against an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentBody"
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoicePayment"
+
+  /gst-summary:
+    get:
+      operationId: getGstSummary
+      tags: [gst-invoices]
+      summary: Monthly GST summary — output tax, input tax, net liability
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: GST summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GstSummary"
+
+  /supplier-bills:
+    get:
+      operationId: getSupplierBills
+      tags: [gst-invoices]
+      summary: List supplier bills
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Supplier bill list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierBill"
+    post:
+      operationId: createSupplierBill
+      tags: [gst-invoices]
+      summary: Create supplier bill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierBillBody"
+      responses:
+        "201":
+          description: Created bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBill"
+
+  /supplier-bills/report/ap-ageing:
+    get:
+      operationId: getApAgeing
+      tags: [gst-invoices]
+      summary: Accounts payable ageing report
+      responses:
+        "200":
+          description: AP ageing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApAgeingReport"
+
+  /supplier-bills/{id}:
+    get:
+      operationId: getSupplierBill
+      tags: [gst-invoices]
+      summary: Get supplier bill by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBill"
+
+  /supplier-bills/{id}/pay:
+    post:
+      operationId: paySupplierBill
+      tags: [gst-invoices]
+      summary: Record payment against supplier bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, paymentDate]
+              properties:
+                amount:
+                  type: number
+                paymentDate:
+                  type: string
+      responses:
+        "200":
+          description: Updated bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierBill"
+
+  /expenses:
+    get:
+      operationId: getExpenses
+      tags: [gst-invoices]
+      summary: List expenses
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Expense list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+    post:
+      operationId: createExpense
+      tags: [gst-invoices]
+      summary: Create expense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseBody"
+      responses:
+        "201":
+          description: Created expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/categories:
+    get:
+      operationId: getExpenseCategories
+      tags: [gst-invoices]
+      summary: Get expense categories
+      responses:
+        "200":
+          description: Categories list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /expenses/{id}:
+    patch:
+      operationId: updateExpense
+      tags: [gst-invoices]
+      summary: Update expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseBody"
+      responses:
+        "200":
+          description: Updated expense
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+    delete:
+      operationId: deleteExpense
+      tags: [gst-invoices]
+      summary: Delete expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /expenses/{id}/approve:
+    patch:
+      operationId: approveExpense
+      tags: [gst-invoices]
+      summary: Approve expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /expenses/{id}/reject:
+    patch:
+      operationId: rejectExpense
+      tags: [gst-invoices]
+      summary: Reject expense
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+
+  /service-orders:
+    get:
+      operationId: getServiceOrders
+      tags: [service-orders]
+      summary: List service orders (stub)
+      responses:
+        "200":
+          description: Service order list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceOrder"
+
+  /approvals:
+    get:
+      operationId: getApprovals
+      tags: [approvals]
+      summary: List pending approvals (stub)
+      responses:
+        "200":
+          description: Approval list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Approval"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/employee-performance:
+    get:
+      operationId: getDashboardEmployeePerformance
+      tags: [dashboard]
+      summary: Get employee performance stats by department
+      responses:
+        "200":
+          description: Employee performance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeePerformance"
+
+  /dashboard/creditors-debtors:
+    get:
+      operationId: getDashboardCreditorsDebtors
+      tags: [dashboard]
+      summary: Get creditors and debtors summary
+      responses:
+        "200":
+          description: Creditors and debtors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditorsDebtors"
+
+  /dashboard/gst-itc:
+    get:
+      operationId: getDashboardGstItc
+      tags: [dashboard]
+      summary: Get GST ITC vs output for current month
+      responses:
+        "200":
+          description: GST ITC summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GstItcSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +1985,2428 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    ChangePasswordBody:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required:
+        - currentPassword
+        - newPassword
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        isActive:
+          type: boolean
+      required:
+        - id
+        - name
+        - email
+        - role
+        - department
+        - isActive
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        phone:
+          type: ["string", "null"]
+        designation:
+          type: ["string", "null"]
+        dateOfJoining:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - role
+        - department
+        - isActive
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        phone:
+          type: string
+        designation:
+          type: string
+        dateOfJoining:
+          type: string
+      required:
+        - name
+        - email
+        - password
+        - role
+        - department
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        phone:
+          type: string
+        designation:
+          type: string
+        dateOfJoining:
+          type: string
+        isActive:
+          type: boolean
+
+    DepartmentRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - code
+        - name
+        - createdAt
+
+    Lead:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerName:
+          type: string
+        company:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        gstNumber:
+          type: string
+          nullable: true
+        billingAddress:
+          type: string
+          nullable: true
+        deliveryAddress:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [indiaMart, website, referral, direct, other]
+        productInterest:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        lastFollowupNote:
+          type: string
+          nullable: true
+        lastFollowupAt:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [new, contacted, proposalSent, negotiating, won, lost, onHold]
+        assignedToId:
+          type: integer
+          nullable: true
+        assignedToName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - customerName
+        - source
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateLeadBody:
+      type: object
+      properties:
+        customerName:
+          type: string
+        company:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        gstNumber:
+          type: string
+        billingAddress:
+          type: string
+        deliveryAddress:
+          type: string
+        source:
+          type: string
+          enum: [indiaMart, website, referral, direct, other]
+        productInterest:
+          type: string
+        notes:
+          type: string
+        lastFollowupNote:
+          type: string
+        lastFollowupAt:
+          type: string
+        assignedToId:
+          type: integer
+      required:
+        - customerName
+
+    UpdateLeadBody:
+      type: object
+      properties:
+        customerName:
+          type: string
+        company:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        gstNumber:
+          type: string
+        billingAddress:
+          type: string
+        deliveryAddress:
+          type: string
+        source:
+          type: string
+          enum: [indiaMart, website, referral, direct, other]
+        productInterest:
+          type: string
+        notes:
+          type: string
+        lastFollowupNote:
+          type: string
+        lastFollowupAt:
+          type: string
+        status:
+          type: string
+          enum: [new, contacted, proposalSent, negotiating, won, lost, onHold]
+        assignedToId:
+          type: integer
+
+    FunnelStat:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required:
+        - status
+        - count
+
+    ProposalLineItem:
+      type: object
+      properties:
+        description:
+          type: string
+        qty:
+          type: number
+        unitPrice:
+          type: number
+        gstRate:
+          type: number
+      required:
+        - description
+        - qty
+        - unitPrice
+
+    Proposal:
+      type: object
+      properties:
+        id:
+          type: integer
+        proposalNumber:
+          type: string
+        leadId:
+          type: integer
+        customerName:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+        salespersonId:
+          type: integer
+          nullable: true
+        salespersonName:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProposalLineItem"
+        discountPercent:
+          type: number
+        gstRate:
+          type: number
+        subtotal:
+          type: number
+        discountAmount:
+          type: number
+        gstAmount:
+          type: number
+        total:
+          type: number
+        status:
+          type: string
+          enum: [draft, sent, won, onHold, lost]
+        validUntil:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        onHoldReminderDue:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - proposalNumber
+        - leadId
+        - lineItems
+        - discountPercent
+        - gstRate
+        - subtotal
+        - discountAmount
+        - gstAmount
+        - total
+        - status
+        - onHoldReminderDue
+        - createdAt
+        - updatedAt
+
+    CreateProposalBody:
+      type: object
+      properties:
+        leadId:
+          type: integer
+        salespersonId:
+          type: integer
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProposalLineItem"
+        discountPercent:
+          type: number
+        gstRate:
+          type: number
+        validUntil:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [draft, sent, won, onHold, lost]
+      required:
+        - leadId
+
+    UpdateProposalBody:
+      type: object
+      properties:
+        salespersonId:
+          type: integer
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProposalLineItem"
+        discountPercent:
+          type: number
+        gstRate:
+          type: number
+        validUntil:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [draft, sent, won, onHold, lost]
+
+    CleanupResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        deleted:
+          type: integer
+      required:
+        - success
+        - deleted
+
+    WorkOrderStub:
+      type: object
+      properties:
+        proposalId:
+          type: integer
+        proposalNumber:
+          type: string
+        leadId:
+          type: integer
+        customerName:
+          type: string
+          nullable: true
+        total:
+          type: number
+        status:
+          type: string
+        message:
+          type: string
+      required:
+        - proposalId
+        - proposalNumber
+        - leadId
+        - total
+        - status
+        - message
+
+    MarkWonResult:
+      type: object
+      properties:
+        proposal:
+          $ref: "#/components/schemas/Proposal"
+        workOrder:
+          $ref: "#/components/schemas/WorkOrderStub"
+      required:
+        - proposal
+        - workOrder
+
+    PoLineItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        purchaseOrderId:
+          type: integer
+        description:
+          type: string
+        qty:
+          type: number
+        unitPrice:
+          type: number
+        gstRate:
+          type: number
+      required:
+        - id
+        - purchaseOrderId
+        - description
+        - qty
+        - unitPrice
+        - gstRate
+
+    SubcontractRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        workOrderItemId:
+          type: integer
+        vendorName:
+          type: string
+        vendorContact:
+          type: string
+          nullable: true
+        cost:
+          type: number
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - workOrderItemId
+        - vendorName
+        - cost
+        - status
+        - createdAt
+
+    DeliveryRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        workOrderId:
+          type: integer
+        expectedDate:
+          type: string
+          nullable: true
+        actualDispatchDate:
+          type: string
+          nullable: true
+        transporter:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [scheduled, dispatched, delivered]
+        invoiceGenerated:
+          type: boolean
+        invoiceNumber:
+          type: string
+          nullable: true
+        invoiceGeneratedAt:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - workOrderId
+        - status
+        - invoiceGenerated
+        - createdAt
+
+    PurchaseOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        poNumber:
+          type: string
+        workOrderId:
+          type: integer
+        workOrderItemId:
+          type: integer
+          nullable: true
+        supplierName:
+          type: string
+        supplierContact:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [imported, rawMaterial]
+        quotedAmount:
+          type: number
+        poAmount:
+          type: number
+        status:
+          type: string
+          enum: [draft, pendingApproval, approved, received, cancelled]
+        requiresCfoApproval:
+          type: boolean
+        approvedById:
+          type: integer
+          nullable: true
+        approvedByName:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          nullable: true
+        rejectionNote:
+          type: string
+          nullable: true
+        receivedAt:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/PoLineItem"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - poNumber
+        - workOrderId
+        - supplierName
+        - type
+        - quotedAmount
+        - poAmount
+        - status
+        - requiresCfoApproval
+        - lineItems
+        - createdAt
+        - updatedAt
+
+    WorkOrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        workOrderId:
+          type: integer
+        description:
+          type: string
+        qty:
+          type: number
+        unitPrice:
+          type: number
+        workflowType:
+          type: string
+          nullable: true
+          enum: [imported, manufacturing, null]
+        currentStep:
+          type: string
+        productionRequestNote:
+          type: string
+          nullable: true
+        purchaseOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseOrder"
+        subcontracts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubcontractRecord"
+      required:
+        - id
+        - workOrderId
+        - description
+        - qty
+        - unitPrice
+        - currentStep
+        - purchaseOrders
+        - subcontracts
+
+    WorkOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        woNumber:
+          type: string
+        proposalId:
+          type: integer
+          nullable: true
+        customerName:
+          type: string
+        company:
+          type: string
+          nullable: true
+        total:
+          type: number
+        status:
+          type: string
+          enum: [draft, inProgress, pendingApproval, delivered, cancelled]
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkOrderItem"
+        deliveries:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeliveryRecord"
+        purchaseOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseOrder"
+      required:
+        - id
+        - woNumber
+        - customerName
+        - total
+        - status
+        - createdAt
+        - updatedAt
+        - items
+        - deliveries
+        - purchaseOrders
+
+    CreateWorkOrderBody:
+      type: object
+      properties:
+        proposalId:
+          type: integer
+        customerName:
+          type: string
+        company:
+          type: string
+        total:
+          type: number
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              qty:
+                type: number
+              unitPrice:
+                type: number
+              workflowType:
+                type: string
+                enum: [imported, manufacturing]
+            required:
+              - description
+      required:
+        - customerName
+
+    UpdateWorkOrderBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, inProgress, pendingApproval, delivered, cancelled]
+        notes:
+          type: string
+        customerName:
+          type: string
+
+    UpdateWorkOrderItemBody:
+      type: object
+      properties:
+        workflowType:
+          type: string
+          enum: [imported, manufacturing]
+        currentStep:
+          type: string
+        productionRequestNote:
+          type: string
+
+    CreateSubcontractBody:
+      type: object
+      properties:
+        workOrderItemId:
+          type: integer
+        vendorName:
+          type: string
+        vendorContact:
+          type: string
+        cost:
+          type: number
+        description:
+          type: string
+        status:
+          type: string
+      required:
+        - workOrderItemId
+        - vendorName
+
+    UpsertDeliveryBody:
+      type: object
+      properties:
+        expectedDate:
+          type: string
+        actualDispatchDate:
+          type: string
+        transporter:
+          type: string
+        trackingNumber:
+          type: string
+        status:
+          type: string
+          enum: [scheduled, dispatched, delivered]
+        notes:
+          type: string
+
+    GenerateInvoiceResult:
+      type: object
+      properties:
+        workOrder:
+          $ref: "#/components/schemas/WorkOrder"
+        invoiceNumber:
+          type: string
+      required:
+        - workOrder
+        - invoiceNumber
+
+    CreatePurchaseOrderBody:
+      type: object
+      properties:
+        workOrderId:
+          type: integer
+        workOrderItemId:
+          type: integer
+        supplierName:
+          type: string
+        supplierContact:
+          type: string
+        type:
+          type: string
+          enum: [imported, rawMaterial]
+        quotedAmount:
+          type: number
+        poAmount:
+          type: number
+        notes:
+          type: string
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              qty:
+                type: number
+              unitPrice:
+                type: number
+              gstRate:
+                type: number
+            required:
+              - description
+      required:
+        - workOrderId
+        - supplierName
+
+    UpdatePurchaseOrderBody:
+      type: object
+      properties:
+        supplierName:
+          type: string
+        supplierContact:
+          type: string
+        quotedAmount:
+          type: number
+        poAmount:
+          type: number
+        notes:
+          type: string
+
+
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        itemCode:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [rawMaterial, wip, finishedGoods]
+        unit:
+          type: string
+        hsnCode:
+          type: string
+          nullable: true
+        gstRate:
+          type: number
+        reorderLevel:
+          type: number
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        stockBalance:
+          type: number
+        isLowStock:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - itemCode
+        - name
+        - category
+        - unit
+        - gstRate
+        - reorderLevel
+        - isActive
+        - stockBalance
+        - isLowStock
+        - createdAt
+        - updatedAt
+
+    CreateInventoryItemBody:
+      type: object
+      properties:
+        itemCode:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [rawMaterial, wip, finishedGoods]
+        unit:
+          type: string
+        hsnCode:
+          type: string
+        gstRate:
+          type: number
+        reorderLevel:
+          type: number
+        description:
+          type: string
+      required:
+        - itemCode
+        - name
+
+    UpdateInventoryItemBody:
+      type: object
+      properties:
+        itemCode:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [rawMaterial, wip, finishedGoods]
+        unit:
+          type: string
+        hsnCode:
+          type: string
+        gstRate:
+          type: number
+        reorderLevel:
+          type: number
+        description:
+          type: string
+        isActive:
+          type: boolean
+
+    StockTransaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        itemId:
+          type: integer
+        type:
+          type: string
+          enum: [in, out]
+        qty:
+          type: number
+        rate:
+          type: number
+        referenceType:
+          type: string
+          nullable: true
+        referenceId:
+          type: integer
+          nullable: true
+        referenceNumber:
+          type: string
+          nullable: true
+        poNumber:
+          type: string
+          nullable: true
+        supplierBillNumber:
+          type: string
+          nullable: true
+        dcNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - itemId
+        - type
+        - qty
+        - rate
+        - createdAt
+
+    StockLedger:
+      type: object
+      properties:
+        item:
+          $ref: "#/components/schemas/InventoryItem"
+        ledger:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              itemId:
+                type: integer
+              type:
+                type: string
+              qty:
+                type: number
+              rate:
+                type: number
+              referenceType:
+                type: string
+                nullable: true
+              referenceNumber:
+                type: string
+                nullable: true
+              notes:
+                type: string
+                nullable: true
+              createdByName:
+                type: string
+                nullable: true
+              createdAt:
+                type: string
+              runningBalance:
+                type: number
+            required:
+              - id
+              - itemId
+              - type
+              - qty
+              - rate
+              - createdAt
+              - runningBalance
+      required:
+        - item
+        - ledger
+
+    InventoryDashboard:
+      type: object
+      properties:
+        totalSkus:
+          type: integer
+        lowStockCount:
+          type: integer
+        recentTransactions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              itemId:
+                type: integer
+              itemName:
+                type: string
+                nullable: true
+              type:
+                type: string
+              qty:
+                type: number
+              rate:
+                type: number
+              createdAt:
+                type: string
+            required:
+              - id
+              - itemId
+              - type
+              - qty
+              - rate
+              - createdAt
+      required:
+        - totalSkus
+        - lowStockCount
+        - recentTransactions
+
+    CreateStockTransactionBody:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        type:
+          type: string
+          enum: [in, out]
+        qty:
+          type: number
+        rate:
+          type: number
+        referenceType:
+          type: string
+          enum: [po, workOrder, manual]
+        referenceId:
+          type: integer
+        referenceNumber:
+          type: string
+        poNumber:
+          type: string
+          description: Required for Stock IN
+        supplierBillNumber:
+          type: string
+          description: Required for Stock IN
+        dcNumber:
+          type: string
+          description: Required for Stock OUT
+        notes:
+          type: string
+      required:
+        - itemId
+        - type
+        - qty
+
+    BulkStockTransactionBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [in, out]
+        referenceType:
+          type: string
+          enum: [po, workOrder, manual]
+        referenceId:
+          type: integer
+        referenceNumber:
+          type: string
+        poNumber:
+          type: string
+          description: Required for Stock IN
+        supplierBillNumber:
+          type: string
+          description: Required for Stock IN
+        dcNumber:
+          type: string
+          description: Required for Stock OUT
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemId:
+                type: integer
+              qty:
+                type: number
+              rate:
+                type: number
+            required:
+              - itemId
+              - qty
+      required:
+        - type
+        - items
+
+    BomLineItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        bomId:
+          type: integer
+        rawMaterialItemId:
+          type: integer
+        rawMaterialName:
+          type: string
+          nullable: true
+        rawMaterialCode:
+          type: string
+          nullable: true
+        qty:
+          type: number
+        unit:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - id
+        - bomId
+        - rawMaterialItemId
+        - qty
+
+    BomTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        finishedItemId:
+          type: integer
+        finishedItemName:
+          type: string
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/BomLineItem"
+      required:
+        - id
+        - finishedItemId
+        - name
+        - isActive
+        - createdAt
+        - updatedAt
+        - lineItems
+
+    CreateBomBody:
+      type: object
+      properties:
+        finishedItemId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              rawMaterialItemId:
+                type: integer
+              qty:
+                type: number
+              unit:
+                type: string
+              notes:
+                type: string
+            required:
+              - rawMaterialItemId
+              - qty
+      required:
+        - finishedItemId
+        - name
+
+    UpdateBomBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        isActive:
+          type: boolean
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              rawMaterialItemId:
+                type: integer
+              qty:
+                type: number
+              unit:
+                type: string
+              notes:
+                type: string
+            required:
+              - rawMaterialItemId
+              - qty
+
+    BomItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        workOrderId:
+          type: integer
+        itemCode:
+          type: string
+        quantity:
+          type: number
+      required:
+        - id
+        - workOrderId
+        - itemCode
+        - quantity
+
+    Employee:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeCode:
+          type: string
+        userId:
+          type: ["integer", "null"]
+        userName:
+          type: ["string", "null"]
+        name:
+          type: string
+        designation:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        dateOfJoining:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        employmentType:
+          type: string
+          enum: [fullTime, contract, partTime]
+        basicSalary:
+          type: ["number", "null"]
+        hra:
+          type: ["number", "null"]
+        otherAllowances:
+          type: ["number", "null"]
+        grossSalary:
+          type: ["number", "null"]
+        workingDaysPerMonth:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - employeeCode
+        - name
+        - employmentType
+        - isActive
+        - createdAt
+        - updatedAt
+
+    LeaveBalance:
+      type: object
+      properties:
+        id:
+          type: integer
+        leaveType:
+          type: string
+          enum: [casual, sick, earned]
+        year:
+          type: integer
+        totalDays:
+          type: integer
+        usedDays:
+          type: integer
+        remainingDays:
+          type: integer
+      required:
+        - id
+        - leaveType
+        - year
+        - totalDays
+        - usedDays
+        - remainingDays
+
+    EmployeeDetail:
+      allOf:
+        - $ref: "#/components/schemas/Employee"
+        - type: object
+          properties:
+            leaveBalances:
+              type: array
+              items:
+                $ref: "#/components/schemas/LeaveBalance"
+          required:
+            - leaveBalances
+
+    CreateEmployeeBody:
+      type: object
+      properties:
+        employeeCode:
+          type: string
+        userId:
+          type: integer
+        name:
+          type: string
+        designation:
+          type: string
+        department:
+          type: string
+        dateOfJoining:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        employmentType:
+          type: string
+          enum: [fullTime, contract, partTime]
+        basicSalary:
+          type: number
+        hra:
+          type: number
+        otherAllowances:
+          type: number
+        workingDaysPerMonth:
+          type: integer
+      required:
+        - employeeCode
+        - name
+
+    UpdateEmployeeBody:
+      type: object
+      properties:
+        employeeCode:
+          type: string
+        userId:
+          type: integer
+        name:
+          type: string
+        designation:
+          type: string
+        department:
+          type: string
+        dateOfJoining:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        employmentType:
+          type: string
+          enum: [fullTime, contract, partTime]
+        basicSalary:
+          type: number
+        hra:
+          type: number
+        otherAllowances:
+          type: number
+        workingDaysPerMonth:
+          type: integer
+        isActive:
+          type: boolean
+
+    SetLeaveBalanceBody:
+      type: object
+      properties:
+        leaveType:
+          type: string
+          enum: [casual, sick, earned]
+        year:
+          type: integer
+        totalDays:
+          type: integer
+      required:
+        - leaveType
+        - year
+        - totalDays
+
+    AttendanceRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        employeeName:
+          type: ["string", "null"]
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, absent, halfDay, late, onLeave]
+        notes:
+          type: ["string", "null"]
+        markedById:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - employeeId
+        - date
+        - status
+        - createdAt
+
+    MarkAttendanceBody:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, absent, halfDay, late, onLeave]
+        notes:
+          type: string
+      required:
+        - employeeId
+        - date
+        - status
+
+    BulkAttendanceBody:
+      type: object
+      properties:
+        date:
+          type: string
+        records:
+          type: array
+          items:
+            type: object
+            properties:
+              employeeId:
+                type: integer
+              status:
+                type: string
+                enum: [present, absent, halfDay, late, onLeave]
+              notes:
+                type: string
+            required:
+              - employeeId
+              - status
+      required:
+        - date
+        - records
+
+    AttendanceSummary:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeCode:
+          type: string
+        employeeName:
+          type: string
+        department:
+          type: ["string", "null"]
+        present:
+          type: integer
+        absent:
+          type: integer
+        halfDay:
+          type: integer
+        late:
+          type: integer
+        onLeave:
+          type: integer
+        effectiveDays:
+          type: number
+        workingDaysPerMonth:
+          type: integer
+        basicSalary:
+          type: ["number", "null"]
+        hra:
+          type: ["number", "null"]
+        otherAllowances:
+          type: ["number", "null"]
+        grossSalary:
+          type: ["number", "null"]
+        netPay:
+          type: ["number", "null"]
+      required:
+        - employeeId
+        - employeeCode
+        - employeeName
+        - present
+        - absent
+        - halfDay
+        - late
+        - onLeave
+        - effectiveDays
+        - workingDaysPerMonth
+        - basicSalary
+        - hra
+        - otherAllowances
+        - grossSalary
+        - netPay
+
+    LeaveRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        employeeName:
+          type: ["string", "null"]
+        leaveType:
+          type: string
+          enum: [casual, sick, earned]
+        fromDate:
+          type: string
+        toDate:
+          type: string
+        reason:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        approvedById:
+          type: ["integer", "null"]
+        approvedByName:
+          type: ["string", "null"]
+        approvedAt:
+          type: ["string", "null"]
+        rejectionNote:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - employeeId
+        - leaveType
+        - fromDate
+        - toDate
+        - status
+        - createdAt
+
+    CreateLeaveRequestBody:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        leaveType:
+          type: string
+          enum: [casual, sick, earned]
+        fromDate:
+          type: string
+        toDate:
+          type: string
+        reason:
+          type: string
+      required:
+        - employeeId
+        - leaveType
+        - fromDate
+        - toDate
+
+    PayrollRecord:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeCode:
+          type: string
+        employeeName:
+          type: string
+        department:
+          type: ["string", "null"]
+        designation:
+          type: ["string", "null"]
+        employmentType:
+          type: string
+        month:
+          type: integer
+        year:
+          type: integer
+        workingDays:
+          type: integer
+        present:
+          type: integer
+        halfDay:
+          type: integer
+        late:
+          type: integer
+        onLeave:
+          type: integer
+        absent:
+          type: integer
+        effectiveDays:
+          type: number
+        basicSalary:
+          type: number
+        hra:
+          type: number
+        otherAllowances:
+          type: number
+        grossSalary:
+          type: number
+        netPay:
+          type: number
+      required:
+        - employeeId
+        - employeeCode
+        - employeeName
+        - employmentType
+        - month
+        - year
+        - workingDays
+        - present
+        - halfDay
+        - late
+        - onLeave
+        - absent
+        - effectiveDays
+        - basicSalary
+        - hra
+        - otherAllowances
+        - grossSalary
+        - netPay
+
+    GstInvoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        invoiceDate:
+          type: string
+        customerName:
+          type: string
+        customerAddress:
+          type: ["string", "null"]
+        customerGstin:
+          type: ["string", "null"]
+        bcaGstin:
+          type: ["string", "null"]
+        workOrderId:
+          type: ["integer", "null"]
+        transactionType:
+          type: string
+        subtotal:
+          type: string
+        cgstAmount:
+          type: string
+        sgstAmount:
+          type: string
+        igstAmount:
+          type: string
+        roundOff:
+          type: string
+        total:
+          type: string
+        status:
+          type: string
+        paidAmount:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - invoiceNumber
+        - invoiceDate
+        - customerName
+        - transactionType
+        - subtotal
+        - cgstAmount
+        - sgstAmount
+        - igstAmount
+        - roundOff
+        - total
+        - status
+        - paidAmount
+        - createdAt
+        - updatedAt
+
+    InvoiceLineItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        description:
+          type: string
+        hsnCode:
+          type: ["string", "null"]
+        qty:
+          type: string
+        unitPrice:
+          type: string
+        taxableValue:
+          type: string
+        gstRate:
+          type: string
+        cgstAmount:
+          type: string
+        sgstAmount:
+          type: string
+        igstAmount:
+          type: string
+        lineTotal:
+          type: string
+      required:
+        - id
+        - invoiceId
+        - description
+        - qty
+        - unitPrice
+        - taxableValue
+        - gstRate
+        - cgstAmount
+        - sgstAmount
+        - igstAmount
+        - lineTotal
+
+    InvoicePayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        paymentDate:
+          type: string
+        amount:
+          type: string
+        paymentMode:
+          type: string
+        reference:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - invoiceId
+        - paymentDate
+        - amount
+        - paymentMode
+        - createdAt
+
+    GstInvoiceDetail:
+      allOf:
+        - $ref: "#/components/schemas/GstInvoice"
+        - type: object
+          properties:
+            lineItems:
+              type: array
+              items:
+                $ref: "#/components/schemas/InvoiceLineItem"
+            payments:
+              type: array
+              items:
+                $ref: "#/components/schemas/InvoicePayment"
+          required:
+            - lineItems
+            - payments
+
+    CreateInvoiceLineItemBody:
+      type: object
+      required: [description, qty, unitPrice]
+      properties:
+        description:
+          type: string
+        hsnCode:
+          type: string
+        qty:
+          type: number
+        unitPrice:
+          type: number
+        gstRate:
+          type: number
+
+    CreateGstInvoiceBody:
+      type: object
+      required: [customerName, invoiceDate, lineItems]
+      properties:
+        customerName:
+          type: string
+        customerAddress:
+          type: string
+        customerGstin:
+          type: string
+        bcaGstin:
+          type: string
+        invoiceDate:
+          type: string
+        dueDate:
+          type: string
+        workOrderId:
+          type: integer
+        transactionType:
+          type: string
+        notes:
+          type: string
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateInvoiceLineItemBody"
+
+    RecordPaymentBody:
+      type: object
+      required: [paymentDate, amount]
+      properties:
+        paymentDate:
+          type: string
+        amount:
+          type: number
+        paymentMode:
+          type: string
+        reference:
+          type: string
+        notes:
+          type: string
+
+    GstSummary:
+      type: object
+      properties:
+        year:
+          type: string
+        month:
+          type: string
+        invoiceCount:
+          type: integer
+        outputSubtotal:
+          type: number
+        outputCgst:
+          type: number
+        outputSgst:
+          type: number
+        outputIgst:
+          type: number
+        outputGst:
+          type: number
+        billCount:
+          type: integer
+        inputSubtotal:
+          type: number
+        inputCgst:
+          type: number
+        inputSgst:
+          type: number
+        inputIgst:
+          type: number
+        inputGst:
+          type: number
+        netCgst:
+          type: number
+        netSgst:
+          type: number
+        netIgst:
+          type: number
+        netGstLiability:
+          type: number
+      required:
+        - year
+        - month
+        - invoiceCount
+        - outputSubtotal
+        - outputCgst
+        - outputSgst
+        - outputIgst
+        - outputGst
+        - billCount
+        - inputSubtotal
+        - inputCgst
+        - inputSgst
+        - inputIgst
+        - inputGst
+        - netCgst
+        - netSgst
+        - netIgst
+        - netGstLiability
+
+    ArAgeingRow:
+      type: object
+      properties:
+        invoiceId:
+          type: integer
+        invoiceNumber:
+          type: string
+        customerName:
+          type: string
+        invoiceDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        total:
+          type: number
+        paidAmount:
+          type: number
+        outstanding:
+          type: number
+        daysOverdue:
+          type: integer
+        status:
+          type: string
+      required:
+        - invoiceId
+        - invoiceNumber
+        - customerName
+        - invoiceDate
+        - total
+        - paidAmount
+        - outstanding
+        - daysOverdue
+        - status
+
+    AgeingSummary:
+      type: object
+      properties:
+        current:
+          type: number
+        days30:
+          type: number
+        days60:
+          type: number
+        days90:
+          type: number
+        days90plus:
+          type: number
+      required: [current, days30, days60, days90, days90plus]
+
+    ArAgeingReport:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArAgeingRow"
+        summary:
+          $ref: "#/components/schemas/AgeingSummary"
+      required: [rows, summary]
+
+    ApAgeingRow:
+      type: object
+      properties:
+        billId:
+          type: integer
+        billNumber:
+          type: string
+        supplierName:
+          type: string
+        billDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        total:
+          type: number
+        paidAmount:
+          type: number
+        outstanding:
+          type: number
+        daysOverdue:
+          type: integer
+        status:
+          type: string
+      required:
+        - billId
+        - billNumber
+        - supplierName
+        - billDate
+        - total
+        - paidAmount
+        - outstanding
+        - daysOverdue
+        - status
+
+    ApAgeingReport:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApAgeingRow"
+        summary:
+          $ref: "#/components/schemas/AgeingSummary"
+      required: [rows, summary]
+
+    SupplierBill:
+      type: object
+      properties:
+        id:
+          type: integer
+        billNumber:
+          type: string
+        supplierName:
+          type: string
+        supplierGstin:
+          type: ["string", "null"]
+        purchaseOrderId:
+          type: ["integer", "null"]
+        billDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        subtotal:
+          type: string
+        gstAmount:
+          type: string
+        total:
+          type: string
+        paidAmount:
+          type: string
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - billNumber
+        - supplierName
+        - billDate
+        - subtotal
+        - gstAmount
+        - total
+        - paidAmount
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateSupplierBillBody:
+      type: object
+      required: [billNumber, supplierName, billDate, subtotal, gstAmount, total]
+      properties:
+        billNumber:
+          type: string
+        supplierName:
+          type: string
+        supplierGstin:
+          type: string
+        purchaseOrderId:
+          type: integer
+        billDate:
+          type: string
+        dueDate:
+          type: string
+        transactionType:
+          type: string
+          enum: [intrastate, interstate]
+        subtotal:
+          type: number
+        gstAmount:
+          type: number
+        cgstAmount:
+          type: number
+        sgstAmount:
+          type: number
+        igstAmount:
+          type: number
+        total:
+          type: number
+        notes:
+          type: string
+
+    Expense:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        amount:
+          type: string
+        category:
+          type: string
+        expenseDate:
+          type: string
+        status:
+          type: string
+        approvedById:
+          type: ["integer", "null"]
+        approvedAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        receiptRef:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - amount
+        - category
+        - expenseDate
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateExpenseBody:
+      type: object
+      required: [name, amount, category, expenseDate]
+      properties:
+        name:
+          type: string
+        amount:
+          type: number
+        category:
+          type: string
+        expenseDate:
+          type: string
+        notes:
+          type: string
+        receiptRef:
+          type: string
+
+    ServiceOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        soNumber:
+          type: string
+        clientName:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - soNumber
+        - clientName
+        - status
+        - createdAt
+
+    Approval:
+      type: object
+      properties:
+        id:
+          type: integer
+        entityType:
+          type: string
+        entityId:
+          type: integer
+        status:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - entityType
+        - entityId
+        - status
+        - createdAt
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        activeUsers:
+          type: integer
+        totalLeads:
+          type: integer
+        openWorkOrders:
+          type: integer
+        pendingApprovals:
+          type: integer
+        lowStockItems:
+          type: integer
+        monthlyRevenue:
+          type: number
+        openServiceOrders:
+          type: integer
+      required:
+        - totalUsers
+        - activeUsers
+        - totalLeads
+        - openWorkOrders
+        - pendingApprovals
+        - lowStockItems
+        - monthlyRevenue
+        - openServiceOrders
+
+    EmployeePerformance:
+      type: object
+      properties:
+        sales:
+          type: array
+          items:
+            type: object
+            properties:
+              dept:
+                type: string
+              proposals:
+                type: string
+              won:
+                type: string
+        installation:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              executions:
+                type: string
+        service:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              attended:
+                type: string
+      required:
+        - sales
+        - installation
+        - service
+
+    CreditorsDebtors:
+      type: object
+      properties:
+        debtors:
+          type: object
+          properties:
+            totalOutstanding:
+              type: number
+            overdue:
+              type: number
+          required:
+            - totalOutstanding
+            - overdue
+        creditors:
+          type: object
+          properties:
+            totalOutstanding:
+              type: number
+            overdue:
+              type: number
+          required:
+            - totalOutstanding
+            - overdue
+      required:
+        - debtors
+        - creditors
+
+    GstItcSummary:
+      type: object
+      properties:
+        month:
+          type: string
+        inputITC:
+          type: object
+          properties:
+            cgst:
+              type: number
+            sgst:
+              type: number
+            igst:
+              type: number
+            total:
+              type: number
+          required:
+            - cgst
+            - sgst
+            - igst
+            - total
+        outputGST:
+          type: object
+          properties:
+            cgst:
+              type: number
+            sgst:
+              type: number
+            igst:
+              type: number
+            total:
+              type: number
+          required:
+            - cgst
+            - sgst
+            - igst
+            - total
+        netPayable:
+          type: number
+      required:
+        - month
+        - inputITC
+        - outputGST
+        - netPayable

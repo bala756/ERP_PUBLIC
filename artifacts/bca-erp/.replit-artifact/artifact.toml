@@ -1,0 +1,32 @@
+kind = "web"
+previewPath = "/"
+title = "BCA Entertainment Works ERP"
+version = "1.0.0"
+id = "artifacts/bca-erp"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = ["/"]
+localPort = 24260
+
+[services.env]
+PORT = "24260"
+BASE_PATH = "/"
+
+[services.development]
+run = "pnpm --filter @workspace/bca-erp run dev"
+
+[services.production]
+publicDir = "artifacts/bca-erp/dist/public"
+serve = "static"
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/bca-erp", "run", "build"]
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
