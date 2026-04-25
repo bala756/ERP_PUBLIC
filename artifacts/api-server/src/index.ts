@@ -17,6 +17,18 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+async function ensureSequences() {
+  try {
+    const { sql } = await import("drizzle-orm");
+    await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS proposal_seq START 1`);
+    await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS work_order_seq START 1`);
+    await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS po_seq START 1`);
+    logger.info("Ensured numbering sequences exist");
+  } catch (err) {
+    logger.error({ err }, "Failed to ensure numbering sequences");
+  }
+}
+
 async function initProposalSequence() {
   try {
     const { sql } = await import("drizzle-orm");
@@ -82,7 +94,7 @@ async function cleanupLostProposals() {
 
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-app.listen(port, (err) => {
+app.listen(port, async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -90,6 +102,7 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
+  await ensureSequences();
   initProposalSequence();
   initOrderSequences();
   cleanupLostProposals();
