@@ -27,6 +27,13 @@ const createItemSchema = z.object({
   gstRate: z.number().min(0).max(100).default(18),
   reorderLevel: z.number().min(0).default(0),
   description: z.string().optional(),
+  lengthM: z.number().min(0).default(0),
+  widthM: z.number().min(0).default(0),
+  heightM: z.number().min(0).default(0),
+  unitCbm: z.number().min(0).default(0),
+  grossWeightKg: z.number().min(0).default(0),
+  netWeightKg: z.number().min(0).default(0),
+  dutyPercent: z.number().min(0).max(100).default(0),
 });
 
 const updateItemSchema = createItemSchema.partial().extend({
@@ -114,6 +121,13 @@ function serializeItem(item: typeof inventoryItemsTable.$inferSelect, stockBalan
     gstRate: parseFloat(item.gstRate),
     reorderLevel: parseFloat(item.reorderLevel),
     description: item.description ?? null,
+    lengthM: parseFloat(item.lengthM),
+    widthM: parseFloat(item.widthM),
+    heightM: parseFloat(item.heightM),
+    unitCbm: parseFloat(item.unitCbm),
+    grossWeightKg: parseFloat(item.grossWeightKg),
+    netWeightKg: parseFloat(item.netWeightKg),
+    dutyPercent: parseFloat(item.dutyPercent),
     isActive: item.isActive,
     stockBalance: stockBalance ?? 0,
     isLowStock: stockBalance !== undefined && parseFloat(item.reorderLevel) > 0
@@ -224,6 +238,13 @@ inventoryRouter.post("/inventory/items", requireRole(...ITEM_MGMT_ROLES), async 
       ...parsed.data,
       gstRate: parsed.data.gstRate.toString(),
       reorderLevel: parsed.data.reorderLevel.toString(),
+      lengthM: parsed.data.lengthM.toString(),
+      widthM: parsed.data.widthM.toString(),
+      heightM: parsed.data.heightM.toString(),
+      unitCbm: parsed.data.unitCbm.toString(),
+      grossWeightKg: parsed.data.grossWeightKg.toString(),
+      netWeightKg: parsed.data.netWeightKg.toString(),
+      dutyPercent: parsed.data.dutyPercent.toString(),
     })
     .returning();
 
@@ -258,6 +279,13 @@ inventoryRouter.patch("/inventory/items/:id", requireRole(...ITEM_MGMT_ROLES), a
   if (d.gstRate !== undefined) updateData.gstRate = d.gstRate.toString();
   if (d.reorderLevel !== undefined) updateData.reorderLevel = d.reorderLevel.toString();
   if (d.description !== undefined) updateData.description = d.description;
+  if (d.lengthM !== undefined) updateData.lengthM = d.lengthM.toString();
+  if (d.widthM !== undefined) updateData.widthM = d.widthM.toString();
+  if (d.heightM !== undefined) updateData.heightM = d.heightM.toString();
+  if (d.unitCbm !== undefined) updateData.unitCbm = d.unitCbm.toString();
+  if (d.grossWeightKg !== undefined) updateData.grossWeightKg = d.grossWeightKg.toString();
+  if (d.netWeightKg !== undefined) updateData.netWeightKg = d.netWeightKg.toString();
+  if (d.dutyPercent !== undefined) updateData.dutyPercent = d.dutyPercent.toString();
   if (d.isActive !== undefined) updateData.isActive = d.isActive;
 
   const [updated] = await db

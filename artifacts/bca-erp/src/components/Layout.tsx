@@ -26,6 +26,7 @@ import {
   FileText,
   Briefcase,
   ShoppingCart,
+  Ship,
   Package,
   Layers,
   Clock,
@@ -64,6 +65,7 @@ const SECTIONS = [
     items: [
       { title: "Work Orders", url: "/work-orders", icon: Briefcase, roles: ["purchase", "manager", "director", "admin", "production"] },
       { title: "Purchase Orders", url: "/purchase-orders", icon: ShoppingCart, roles: ["purchase", "manager", "director", "admin"] },
+      { title: "Imports & Landed Cost", url: "/imports", icon: Ship, roles: ["purchase", "manager", "director", "admin", "cfo", "accounts", "stores"] },
     ],
   },
   {

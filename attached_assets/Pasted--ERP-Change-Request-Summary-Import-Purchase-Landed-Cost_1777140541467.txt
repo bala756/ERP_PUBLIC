@@ -1,0 +1,325 @@
+# ERP Change Request Summary – Import Purchase / Landed Cost Module
+
+## Objective
+
+Enhance the existing ERP system to properly handle **import purchases from China**, calculate **accurate landed cost**, allocate shipment expenses across multiple products, and support **client-wise profitability**.
+
+---
+
+# Business Scenario
+
+We import multiple products from China under one Purchase Order.
+After shipment arrives, additional charges are paid to multiple vendors such as:
+
+* Ocean Freight
+* Customs Duty
+* Clearing Agent Charges
+* Port Charges
+* Local Transport
+* Insurance
+* EX Works Pickup Charges
+
+These imported products are then distributed/sold to multiple clients in India.
+
+Need ERP to:
+
+* Calculate true landed cost per product
+* Split freight & charges correctly
+* Update inventory cost
+* Track shipment/job profitability
+* Support client-wise margin analysis
+
+---
+
+# Core Design Change
+
+## Introduce Parent Module:
+
+### Import Job / Shipment / Work Order
+
+Example:
+
+`IMP-2026-001`
+
+This record links:
+
+* Purchase Order
+* China Vendor Invoice
+* Expense Bills
+* Currency Rate
+* Container / Shipment Details
+* Cost Allocation
+* Inventory Receipt
+* Client Sales Orders
+
+---
+
+# Required ERP Modules
+
+## 1. Purchase Order Module
+
+Fields:
+
+* PO Number
+* Vendor
+* Currency (USD/CNY)
+* Items
+* Qty
+* Unit Price
+* Expected Ship Date
+* Import Job Link
+
+---
+
+## 2. Supplier Invoice Module
+
+Fields:
+
+* Invoice No
+* Invoice Date
+* Exchange Rate
+* Invoice Amount
+* Linked PO
+* Linked Import Job
+
+---
+
+## 3. Import Expense Module
+
+Support multiple vendors for one shipment.
+
+Expense Types:
+
+* Ocean Freight
+* Customs Duty
+* CHA Charges
+* Insurance
+* Local Transport
+* Port Charges
+* Documentation Charges
+
+Fields:
+
+* Vendor
+* Bill No
+* Amount
+* Currency
+* GST (if applicable)
+* Expense Type
+* Allocation Method
+* Import Job Link
+* Payment Status
+
+---
+
+# Most Important Change
+
+# Landed Cost Allocation Engine
+
+Need system to allocate charges to products automatically.
+
+## Supported Allocation Methods
+
+* CBM (Primary method)
+* Value
+* Quantity
+* Weight
+* Equal Split
+* Manual %
+
+---
+
+# Current Business Rule (Must Implement)
+
+## Use CBM to Allocate:
+
+* Ocean Freight
+* Clearance Charges
+* Local Freight
+* Handling Charges
+
+## Use Value to Allocate:
+
+* Customs Duty
+* Insurance (if needed)
+
+---
+
+# Product Master Changes
+
+Need to add:
+
+* Length
+* Width
+* Height
+* Unit CBM
+* Gross Weight
+* Net Weight
+* HSN Code
+* Duty %
+
+## Formula
+
+CBM = Length × Width × Height (meters)
+
+Total CBM = Qty × Unit CBM
+
+---
+
+# Landed Cost Formula
+
+For each item:
+
+1. EXW Cost
+2. Insurance Share
+3. Freight Share (CBM based)
+4. Assessable Value
+5. INR Conversion
+6. Customs Duty
+7. Social Welfare Surcharge
+8. Local Charges Share
+9. Final Landed Cost
+
+## Final Landed Cost
+
+```text
+Base Cost + Freight + Duty + SWS + Other Charges
+```
+
+## Per Unit Cost
+
+```text
+Final Landed Cost / Qty
+```
+
+---
+
+# Inventory Logic
+
+Do NOT expense freight/duty immediately.
+
+Use:
+
+* Goods In Transit
+* Import Charges Clearing
+* Inventory
+
+When goods received:
+
+```text
+Inventory Dr
+   To Goods In Transit
+   To Import Charges Clearing
+```
+
+---
+
+# Sales / Client Distribution
+
+Need ability to allocate imported stock to multiple clients.
+
+Track:
+
+* Client reservation
+* Dispatch quantity
+* Landed cost consumed
+* Margin %
+
+---
+
+# Reports Required
+
+## Purchase Team
+
+* Pending PO
+* Shipment in transit
+* Vendor lead time
+
+## Accounts Team
+
+* Vendor payable
+* Pending freight bills
+* Duty payable
+* Shipment costing summary
+
+## Management
+
+* Client-wise profit
+* Product-wise margin
+* Shipment profitability
+* Dead stock
+
+
+
+# Suggested UI Flow
+
+```text
+Create Import Job
+↓
+Create PO
+↓
+Upload Supplier Invoice
+↓
+Enter Shipment Expenses
+↓
+Allocate Costs (CBM / Value)
+↓
+Recalculate Landed Cost
+↓
+Receive Inventory
+↓
+Allocate to Clients
+↓
+Sell / Dispatch
+↓
+Profit Reports
+```
+
+---
+
+# Key Buttons Needed
+
+* Recalculate Cost
+* Auto Allocate by CBM
+* Import Excel Charges
+* Post Landed Cost
+* View Shipment P&L
+
+---
+
+# Important Notes for Developers
+
+1. Build Shipment-Centric ERP, not only voucher-centric.
+2. All expenses must tag to Import Job.
+3. Cost recalculation should work when late vendor bills arrive.
+4. Maintain audit log for revised landed costs.
+5. Multi-currency support mandatory.
+
+---
+
+# Priority Implementation Order
+
+## Phase 1
+
+* Import Job
+* Expense Entry
+* CBM Allocation
+* Landed Cost Calculation
+
+## Phase 2
+
+* Inventory Posting
+* Sales Margin Reports
+* Client Allocation
+
+## Phase 3
+
+* Container Tracking
+* Currency Gain/Loss
+* Advanced Dashboards
+
+---
+
+# Final Goal
+
+One-click landed cost calculation for every imported shipment with accurate inventory valuation and profitability tracking.

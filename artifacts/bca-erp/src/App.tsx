@@ -31,6 +31,8 @@ import GSTInvoices from "@/pages/GSTInvoices";
 import SupplierBills from "@/pages/SupplierBills";
 import ExpensesPage from "@/pages/Expenses";
 import GSTSummaryPage from "@/pages/GSTSummary";
+import ImportJobs from "@/pages/ImportJobs";
+import ImportJobDetail from "@/pages/ImportJobDetail";
 import {
   ServiceOrders,
   Approvals,
@@ -87,6 +89,8 @@ function Router() {
       <Route path="/work-orders"><ProtectedRoute><Layout><WorkOrders /></Layout></ProtectedRoute></Route>
       <Route path="/work-orders/:id"><ProtectedRoute><Layout><WorkOrderDetail /></Layout></ProtectedRoute></Route>
       <Route path="/purchase-orders"><ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute></Route>
+      <Route path="/imports"><ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute></Route>
+      <Route path="/imports/:id"><ProtectedRoute><Layout><ImportJobDetail /></Layout></ProtectedRoute></Route>
       <Route path="/inventory"><ProtectedRoute><Layout><Inventory /></Layout></ProtectedRoute></Route>
       <Route path="/inventory/:id/ledger"><ProtectedRoute><Layout><InventoryLedger /></Layout></ProtectedRoute></Route>
       <Route path="/bom"><ProtectedRoute><Layout><BOM /></Layout></ProtectedRoute></Route>
