@@ -95,26 +95,46 @@ function serializeMovement(
 }
 
 /**
- * Compute the moving-average unit cost for OUT movements.
- * Source of truth: stock_movements (new). Legacy stock_transactions is mirrored
- * for the legacy ledger UI but NOT summed here to avoid double-counting writes
- * that exist in both tables. Pre-cutover legacy-only rows can be migrated
- * separately if/when needed.
+ * Compute the perpetual weighted-average unit cost for the next OUT movement.
+ *
+ * Uses remaining-inventory valuation rather than all-time IN average:
+ *   cost = (Σ in_value − Σ out_value) / (Σ in_qty − Σ out_qty)
+ *
+ * Each OUT row carries the unit_cost it was stamped with at issue time, so
+ * subtracting Σ(out qty * out unit_cost) leaves the on-hand layer's value.
+ * After full depletion (numerator and denominator both ~0) the next IN row
+ * resets the basis. Pre-cutover legacy-only rows can be migrated separately
+ * if/when needed.
  */
 async function getMovingAvgCost(itemId: number): Promise<number> {
   const movRes = await db.execute<{ qty: string; cost: string }>(
-    sql`SELECT COALESCE(SUM(qty),0) AS qty,
-               COALESCE(SUM(qty * unit_cost),0) AS cost
+    sql`SELECT
+          COALESCE(SUM(CASE WHEN movement_type='in'  THEN qty ELSE -qty END), 0) AS qty,
+          COALESCE(SUM(CASE WHEN movement_type='in'  THEN qty * unit_cost
+                            ELSE -qty * unit_cost END), 0) AS cost
         FROM stock_movements
-        WHERE item_id = ${itemId} AND movement_type = 'in'`,
+        WHERE item_id = ${itemId}`,
   );
-  const totalQty = parseFloat(
+  const remainingQty = parseFloat(
     (movRes.rows[0] as { qty: string }).qty ?? "0",
   );
-  const totalCost = parseFloat(
+  const remainingCost = parseFloat(
     (movRes.rows[0] as { cost: string }).cost ?? "0",
   );
-  return totalQty > 0 ? totalCost / totalQty : 0;
+  // Guard against tiny negative remainders from floating arithmetic; if
+  // the layer is empty (or briefly negative due to rounding), fall back to
+  // the most recent IN row's unit cost so issues never get a 0 stamp.
+  if (remainingQty > 0.0001) {
+    return remainingCost / remainingQty;
+  }
+  const lastIn = await db.execute<{ unit_cost: string }>(
+    sql`SELECT unit_cost FROM stock_movements
+        WHERE item_id = ${itemId} AND movement_type='in'
+        ORDER BY id DESC LIMIT 1`,
+  );
+  return lastIn.rows.length
+    ? parseFloat((lastIn.rows[0] as { unit_cost: string }).unit_cost ?? "0")
+    : 0;
 }
 
 async function getOnHand(itemId: number): Promise<number> {

@@ -520,11 +520,15 @@ ordersRouter.get(
       const revenueInvoiced = rev?.revenue ?? 0;
       const revenueOrderValue = parseFloat(wo.total ?? "0") || 0;
       const costStoresOut = cogsEntry?.cogs ?? 0;
+      // costSubcontract is reported separately for visibility but NOT
+      // re-added to totalCost: vendor charges are already capitalised into
+      // the finished-goods unit cost stamped on the subcontract receipt
+      // stock_movements row, which then flows through Stores Out into
+      // costStoresOut. Adding it again would double-count it.
       const costSubcontract = subMap.get(wo.id) ?? 0;
       const costImportExpenses = 0;
       const directExpenses = 0;
-      const totalCost =
-        costStoresOut + costSubcontract + costImportExpenses + directExpenses;
+      const totalCost = costStoresOut + costImportExpenses + directExpenses;
       const margin = revenueInvoiced - totalCost;
       const marginPercent =
         revenueInvoiced > 0 ? (margin / revenueInvoiced) * 100 : 0;
@@ -1610,6 +1614,9 @@ ordersRouter.get(
       .select({ totalVendorCost: subcontractJobsTable.totalVendorCost })
       .from(subcontractJobsTable)
       .where(eq(subcontractJobsTable.workOrderId, id));
+    // Reported for visibility only — see summary endpoint above for why
+    // this is intentionally NOT re-added to totalCost (would double-count
+    // vendor charges already capitalised into Stores Out unit costs).
     const costSubcontract = subRows.reduce(
       (sum, r) => sum + parseFloat(r.totalVendorCost),
       0,
@@ -1617,8 +1624,7 @@ ordersRouter.get(
 
     const costImportExpenses = 0;
     const directExpenses = 0;
-    const totalCost =
-      costStoresOut + costSubcontract + costImportExpenses + directExpenses;
+    const totalCost = costStoresOut + costImportExpenses + directExpenses;
     const margin = revenueInvoiced - totalCost;
     const marginPercent =
       revenueInvoiced > 0 ? (margin / revenueInvoiced) * 100 : 0;
