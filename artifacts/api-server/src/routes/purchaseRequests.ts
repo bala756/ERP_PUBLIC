@@ -356,8 +356,10 @@ purchaseRequestsRouter.post(
           .where(eq(workOrdersTable.id, woId));
       }
 
-      res.status(201).json({ id: pr.id, prNumber, workOrderId: woId });
-
+      // Return the full PurchaseRequestDetail so the response satisfies the
+      // generated client type (no slim-payload contract drift).
+      const detail = await buildPrDetail(pr.id);
+      res.status(201).json(detail);
       return;
     } catch (err) {
       logger.error({ err }, "Failed to release WO");
@@ -366,6 +368,88 @@ purchaseRequestsRouter.post(
     }
   },
 );
+
+// Shared helper that returns the full PR Detail payload (matches OpenAPI
+// PurchaseRequestDetail). Used by GET /:id and POST /work-orders/:id/release
+// so both endpoints emit a payload that satisfies the generated client type.
+async function buildPrDetail(prId: number) {
+  const [row] = await db
+    .select({
+      pr: purchaseRequestsTable,
+      wo: workOrdersTable,
+    })
+    .from(purchaseRequestsTable)
+    .leftJoin(
+      workOrdersTable,
+      eq(workOrdersTable.id, purchaseRequestsTable.workOrderId),
+    )
+    .where(eq(purchaseRequestsTable.id, prId));
+  if (!row) return null;
+
+  let createdBy: { name: string } | null = null;
+  let approvedBy: { name: string } | null = null;
+  if (typeof row.pr.createdById === "number") {
+    const [u] = await db
+      .select({ name: usersTable.name })
+      .from(usersTable)
+      .where(eq(usersTable.id, row.pr.createdById));
+    createdBy = u ?? null;
+  }
+  if (typeof row.pr.approvedById === "number") {
+    const [u] = await db
+      .select({ name: usersTable.name })
+      .from(usersTable)
+      .where(eq(usersTable.id, row.pr.approvedById));
+    approvedBy = u ?? null;
+  }
+
+  const items = await db
+    .select({
+      item: purchaseRequestItemsTable,
+      product: inventoryItemsTable,
+    })
+    .from(purchaseRequestItemsTable)
+    .leftJoin(
+      inventoryItemsTable,
+      eq(inventoryItemsTable.id, purchaseRequestItemsTable.productId),
+    )
+    .where(eq(purchaseRequestItemsTable.purchaseRequestId, prId))
+    .orderBy(purchaseRequestItemsTable.id);
+
+  const itemCount = items.length;
+  const totalEstimatedValue = items.reduce(
+    (sum, r) =>
+      sum +
+      parseFloat(r.item.shortfallQty) * parseFloat(r.item.estimatedUnitCost),
+    0,
+  );
+
+  const woSummary: { woNumber: string; customerName: string } | null = row.wo
+    ? { woNumber: row.wo.woNumber, customerName: row.wo.customerName }
+    : null;
+  return {
+    ...serializePr({
+      ...row.pr,
+      workOrder: woSummary,
+      createdBy,
+      approvedBy,
+      itemCount,
+      totalEstimatedValue,
+    }),
+    items: items.map((r) =>
+      serializePrItem({
+        ...r.item,
+        product: r.product
+          ? {
+              name: r.product.name,
+              itemCode: r.product.itemCode,
+              unit: r.product.unit,
+            }
+          : null,
+      }),
+    ),
+  };
+}
 
 // ─── GET /purchase-requests ───────────────────────────────────────────────────
 purchaseRequestsRouter.get(
@@ -430,87 +514,12 @@ purchaseRequestsRouter.get(
       return;
     }
 
-    const [row] = await db
-      .select({
-        pr: purchaseRequestsTable,
-        wo: workOrdersTable,
-      })
-      .from(purchaseRequestsTable)
-      .leftJoin(
-        workOrdersTable,
-        eq(workOrdersTable.id, purchaseRequestsTable.workOrderId),
-      )
-      .where(eq(purchaseRequestsTable.id, id));
-    if (!row) {
+    const detail = await buildPrDetail(id);
+    if (!detail) {
       res.status(404).json({ error: "PR not found" });
       return;
     }
-    let createdBy: { name: string } | null = null;
-    let approvedBy: { name: string } | null = null;
-    const createdById = row.pr.createdById;
-    const approvedById = row.pr.approvedById;
-    if (typeof createdById === "number") {
-      const [u] = await db
-        .select({ name: usersTable.name })
-        .from(usersTable)
-        .where(eq(usersTable.id, createdById));
-      createdBy = u ?? null;
-    }
-    if (typeof approvedById === "number") {
-      const [u] = await db
-        .select({ name: usersTable.name })
-        .from(usersTable)
-        .where(eq(usersTable.id, approvedById));
-      approvedBy = u ?? null;
-    }
-
-    const items = await db
-      .select({
-        item: purchaseRequestItemsTable,
-        product: inventoryItemsTable,
-      })
-      .from(purchaseRequestItemsTable)
-      .leftJoin(
-        inventoryItemsTable,
-        eq(inventoryItemsTable.id, purchaseRequestItemsTable.productId),
-      )
-      .where(eq(purchaseRequestItemsTable.purchaseRequestId, id))
-      .orderBy(purchaseRequestItemsTable.id);
-
-    const itemCount = items.length;
-    const totalEstimatedValue = items.reduce(
-      (sum, r) =>
-        sum +
-        parseFloat(r.item.shortfallQty) *
-          parseFloat(r.item.estimatedUnitCost),
-      0,
-    );
-
-    const woSummary: { woNumber: string; customerName: string } | null = row.wo
-      ? { woNumber: row.wo!.woNumber, customerName: row.wo!.customerName }
-      : null;
-    res.json({
-      ...serializePr({
-        ...row.pr,
-        workOrder: woSummary,
-        createdBy,
-        approvedBy,
-        itemCount,
-        totalEstimatedValue,
-      }),
-      items: items.map((r) =>
-        serializePrItem({
-          ...r.item,
-          product: r.product
-            ? {
-                name: r.product.name,
-                itemCode: r.product.itemCode,
-                unit: r.product.unit,
-              }
-            : null,
-        }),
-      ),
-    });
+    res.json(detail);
   },
 );
 
@@ -571,6 +580,26 @@ purchaseRequestsRouter.patch(
     }
 
     if (data.items) {
+      // Pre-validate: every passed-in item id MUST belong to this PR.
+      // Without this scoping check a caller could mutate items on a
+      // different (possibly approved) PR by passing foreign ids.
+      const ids = data.items.map((it) => it.id);
+      const owned = await db
+        .select({ id: purchaseRequestItemsTable.id })
+        .from(purchaseRequestItemsTable)
+        .where(
+          and(
+            eq(purchaseRequestItemsTable.purchaseRequestId, id),
+            inArray(purchaseRequestItemsTable.id, ids),
+          ),
+        );
+      if (owned.length !== ids.length) {
+        res
+          .status(400)
+          .json({ error: "One or more items do not belong to this PR" });
+        return;
+      }
+
       for (const it of data.items) {
         const update: Record<string, unknown> = {};
         if (it.requiredQty !== undefined) {
@@ -578,7 +607,12 @@ purchaseRequestsRouter.patch(
           const [existing] = await db
             .select()
             .from(purchaseRequestItemsTable)
-            .where(eq(purchaseRequestItemsTable.id, it.id));
+            .where(
+              and(
+                eq(purchaseRequestItemsTable.id, it.id),
+                eq(purchaseRequestItemsTable.purchaseRequestId, id),
+              ),
+            );
           if (existing) {
             update.shortfallQty = Math.max(
               0,
@@ -599,7 +633,12 @@ purchaseRequestsRouter.patch(
           await db
             .update(purchaseRequestItemsTable)
             .set(update)
-            .where(eq(purchaseRequestItemsTable.id, it.id));
+            .where(
+              and(
+                eq(purchaseRequestItemsTable.id, it.id),
+                eq(purchaseRequestItemsTable.purchaseRequestId, id),
+              ),
+            );
         }
       }
     }

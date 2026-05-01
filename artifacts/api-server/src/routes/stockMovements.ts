@@ -86,6 +86,7 @@ function serializeMovement(
     sourceId: row.sourceId ?? null,
     sourceNumber: row.sourceNumber ?? null,
     workOrderId: row.workOrderId ?? null,
+    workOrderNumber: row.workOrder?.woNumber ?? null,
     woNumber: row.workOrder?.woNumber ?? null,
     notes: row.notes ?? null,
     createdByName: row.createdBy?.name ?? null,

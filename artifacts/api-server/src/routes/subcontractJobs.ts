@@ -109,12 +109,14 @@ function serializeJob(
   j: typeof subcontractJobsTable.$inferSelect & {
     workOrder?: { woNumber: string } | null;
     createdBy?: { name: string } | null;
+    itemCount?: number;
   },
 ) {
   return {
     id: j.id,
     jobNumber: j.jobNumber,
     workOrderId: j.workOrderId ?? null,
+    workOrderNumber: j.workOrder?.woNumber ?? null,
     woNumber: j.workOrder?.woNumber ?? null,
     vendorName: j.vendorName,
     vendorContact: j.vendorContact ?? null,
@@ -126,6 +128,7 @@ function serializeJob(
     createdByName: j.createdBy?.name ?? null,
     createdAt: j.createdAt.toISOString(),
     updatedAt: j.updatedAt.toISOString(),
+    itemCount: j.itemCount ?? 0,
   };
 }
 
@@ -278,6 +281,10 @@ subcontractJobsRouter.get(
         j: subcontractJobsTable,
         wo: workOrdersTable,
         createdBy: usersTable,
+        itemCount: sql<number>`(
+          SELECT COUNT(*)::int FROM ${subcontractJobItemsTable}
+          WHERE ${subcontractJobItemsTable.subcontractJobId} = ${subcontractJobsTable.id}
+        )`,
       })
       .from(subcontractJobsTable)
       .leftJoin(
@@ -297,6 +304,7 @@ subcontractJobsRouter.get(
           ...r.j,
           workOrder: r.wo ? { woNumber: r.wo.woNumber } : null,
           createdBy: r.createdBy ? { name: r.createdBy.name } : null,
+          itemCount: r.itemCount ?? 0,
         }),
       ),
     );
@@ -370,6 +378,7 @@ subcontractJobsRouter.get(
         ...row.j,
         workOrder: woSummary,
         createdBy: creatorSummary,
+        itemCount: items.length,
       }),
       items: items.map((r) => {
         const fid = r.i.finishedItemId;
@@ -418,11 +427,36 @@ subcontractJobsRouter.post(
       return;
     }
 
+    // Pre-validate: every passed-in item id MUST belong to this job.
+    // Without this scoping check a caller could mark items on another
+    // job as received and create stock movements under the wrong job.
+    const itemIds = data.items.map((it) => it.id);
+    const ownedItems = await db
+      .select({ id: subcontractJobItemsTable.id })
+      .from(subcontractJobItemsTable)
+      .where(
+        and(
+          eq(subcontractJobItemsTable.subcontractJobId, id),
+          inArray(subcontractJobItemsTable.id, itemIds),
+        ),
+      );
+    if (ownedItems.length !== itemIds.length) {
+      res
+        .status(400)
+        .json({ error: "One or more items do not belong to this job" });
+      return;
+    }
+
     for (const it of data.items) {
       const [existing] = await db
         .select()
         .from(subcontractJobItemsTable)
-        .where(eq(subcontractJobItemsTable.id, it.id));
+        .where(
+          and(
+            eq(subcontractJobItemsTable.id, it.id),
+            eq(subcontractJobItemsTable.subcontractJobId, id),
+          ),
+        );
       if (!existing) continue;
 
       const finishedItemId = it.finishedItemId ?? existing.finishedItemId;
