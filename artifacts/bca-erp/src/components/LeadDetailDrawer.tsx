@@ -145,6 +145,18 @@ export function LeadDetailDrawer({ lead, onClose }: LeadDetailDrawerProps) {
   const queryClient = useQueryClient();
   const open = lead !== null;
 
+  const [localAssignedToId, setLocalAssignedToId] = React.useState<
+    number | null
+  >(lead?.assignedToId ?? null);
+  const [localAssignedToName, setLocalAssignedToName] = React.useState<
+    string | null
+  >(lead?.assignedToName ?? null);
+
+  React.useEffect(() => {
+    setLocalAssignedToId(lead?.assignedToId ?? null);
+    setLocalAssignedToName(lead?.assignedToName ?? null);
+  }, [lead?.id, lead?.assignedToId, lead?.assignedToName]);
+
   const { data: activities, isLoading } = useQuery({
     queryKey: ["lead-activities", lead?.id],
     queryFn: () =>
@@ -166,8 +178,14 @@ export function LeadDetailDrawer({ lead, onClose }: LeadDetailDrawerProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedToId }),
       }),
-    onSuccess: () => {
+    onSuccess: (_data, assignedToId) => {
       toast({ title: "Lead reassigned" });
+      const matched =
+        assignedToId === null
+          ? null
+          : (salespeople?.find((s) => s.id === assignedToId)?.name ?? null);
+      setLocalAssignedToId(assignedToId);
+      setLocalAssignedToName(matched);
       queryClient.invalidateQueries({ queryKey: ["lead-activities", lead?.id] });
       queryClient.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
     },
@@ -215,7 +233,7 @@ export function LeadDetailDrawer({ lead, onClose }: LeadDetailDrawerProps) {
                 <Label>Assigned To</Label>
                 {canReassign ? (
                   <Select
-                    value={lead.assignedToId ? lead.assignedToId.toString() : "none"}
+                    value={localAssignedToId ? localAssignedToId.toString() : "none"}
                     onValueChange={(v) =>
                       reassignMutation.mutate(v === "none" ? null : parseInt(v, 10))
                     }
@@ -234,7 +252,7 @@ export function LeadDetailDrawer({ lead, onClose }: LeadDetailDrawerProps) {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p>{lead.assignedToName ?? "Unassigned"}</p>
+                  <p data-testid="text-assigned-to">{localAssignedToName ?? "Unassigned"}</p>
                 )}
               </div>
 

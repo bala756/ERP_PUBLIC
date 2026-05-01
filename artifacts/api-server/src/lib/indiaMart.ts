@@ -19,6 +19,7 @@ export interface IndiaMartSettings {
   enabled: boolean;
   intervalMinutes: number;
   hasKey: boolean;
+  keySource: "env" | "db" | "none";
   lastSyncAt: string | null;
   lastSyncStatus: "success" | "failure" | null;
   lastSyncMessage: string | null;
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS: IndiaMartSettings = {
   enabled: false,
   intervalMinutes: 60,
   hasKey: false,
+  keySource: "none",
   lastSyncAt: null,
   lastSyncStatus: null,
   lastSyncMessage: null,
@@ -41,11 +43,13 @@ const DEFAULT_SETTINGS: IndiaMartSettings = {
 
 interface InternalSettings extends IndiaMartSettings {
   apiKey: string | null;
+  apiKeySource: "env" | "db" | "none";
 }
 
 interface StoredSettings {
   enabled?: boolean;
   intervalMinutes?: number;
+  apiKey?: string | null;
   lastSyncAt?: string | null;
   lastSyncStatus?: "success" | "failure" | null;
   lastSyncMessage?: string | null;
@@ -65,11 +69,19 @@ async function loadInternalSettings(): Promise<InternalSettings> {
     .from(integrationSettingsTable)
     .where(eq(integrationSettingsTable.key, INDIA_MART_KEY));
   const value = (row?.value as StoredSettings | null) ?? {};
-  const apiKey = getApiKeyFromEnv();
+  const envKey = getApiKeyFromEnv();
+  const dbKey = value.apiKey && value.apiKey.trim() !== "" ? value.apiKey : null;
+  const apiKey = envKey ?? dbKey;
+  const apiKeySource: InternalSettings["apiKeySource"] = envKey
+    ? "env"
+    : dbKey
+      ? "db"
+      : "none";
   return {
     ...DEFAULT_SETTINGS,
     ...value,
     apiKey,
+    apiKeySource,
     hasKey: Boolean(apiKey),
   };
 }
@@ -80,6 +92,7 @@ export async function getIndiaMartSettings(): Promise<IndiaMartSettings> {
     enabled: s.enabled,
     intervalMinutes: s.intervalMinutes,
     hasKey: s.hasKey,
+    keySource: s.apiKeySource,
     lastSyncAt: s.lastSyncAt,
     lastSyncStatus: s.lastSyncStatus,
     lastSyncMessage: s.lastSyncMessage,
@@ -93,29 +106,41 @@ export interface UpdateIndiaMartSettings {
   enabled?: boolean;
   intervalMinutes?: number;
   dedupeWindowDays?: number;
+  apiKey?: string | null;
 }
 
 export async function updateIndiaMartSettings(
   patch: UpdateIndiaMartSettings,
   actorUserId: number,
 ): Promise<IndiaMartSettings> {
-  const current = await loadInternalSettings();
-  const next: InternalSettings = {
-    ...current,
-    enabled: patch.enabled ?? current.enabled,
-    intervalMinutes: patch.intervalMinutes ?? current.intervalMinutes,
-    dedupeWindowDays: patch.dedupeWindowDays ?? current.dedupeWindowDays,
-  };
+  const [row] = await db
+    .select()
+    .from(integrationSettingsTable)
+    .where(eq(integrationSettingsTable.key, INDIA_MART_KEY));
+  const currentStored: StoredSettings =
+    (row?.value as StoredSettings | null) ?? {};
 
   const stored: StoredSettings = {
-    enabled: next.enabled,
-    intervalMinutes: next.intervalMinutes,
-    lastSyncAt: next.lastSyncAt,
-    lastSyncStatus: next.lastSyncStatus,
-    lastSyncMessage: next.lastSyncMessage,
-    lastSyncCount: next.lastSyncCount,
-    totalImported: next.totalImported,
-    dedupeWindowDays: next.dedupeWindowDays,
+    enabled: patch.enabled ?? currentStored.enabled ?? DEFAULT_SETTINGS.enabled,
+    intervalMinutes:
+      patch.intervalMinutes ??
+      currentStored.intervalMinutes ??
+      DEFAULT_SETTINGS.intervalMinutes,
+    dedupeWindowDays:
+      patch.dedupeWindowDays ??
+      currentStored.dedupeWindowDays ??
+      DEFAULT_SETTINGS.dedupeWindowDays,
+    apiKey:
+      patch.apiKey === undefined
+        ? (currentStored.apiKey ?? null)
+        : patch.apiKey === null || patch.apiKey === ""
+          ? null
+          : patch.apiKey,
+    lastSyncAt: currentStored.lastSyncAt ?? null,
+    lastSyncStatus: currentStored.lastSyncStatus ?? null,
+    lastSyncMessage: currentStored.lastSyncMessage ?? null,
+    lastSyncCount: currentStored.lastSyncCount ?? null,
+    totalImported: currentStored.totalImported ?? 0,
   };
 
   await db
@@ -130,17 +155,7 @@ export async function updateIndiaMartSettings(
       set: { value: stored, updatedBy: actorUserId },
     });
 
-  return {
-    enabled: next.enabled,
-    intervalMinutes: next.intervalMinutes,
-    hasKey: next.hasKey,
-    lastSyncAt: next.lastSyncAt,
-    lastSyncStatus: next.lastSyncStatus,
-    lastSyncMessage: next.lastSyncMessage,
-    lastSyncCount: next.lastSyncCount,
-    totalImported: next.totalImported,
-    dedupeWindowDays: next.dedupeWindowDays,
-  };
+  return getIndiaMartSettings();
 }
 
 async function recordSyncResult(
@@ -150,16 +165,19 @@ async function recordSyncResult(
     importedCount: number;
   },
 ): Promise<void> {
-  const current = await loadInternalSettings();
+  const [row] = await db
+    .select()
+    .from(integrationSettingsTable)
+    .where(eq(integrationSettingsTable.key, INDIA_MART_KEY));
+  const currentStored: StoredSettings =
+    (row?.value as StoredSettings | null) ?? {};
   const stored: StoredSettings = {
-    enabled: current.enabled,
-    intervalMinutes: current.intervalMinutes,
+    ...currentStored,
     lastSyncAt: new Date().toISOString(),
     lastSyncStatus: result.status,
     lastSyncMessage: result.message,
     lastSyncCount: result.importedCount,
-    totalImported: current.totalImported + result.importedCount,
-    dedupeWindowDays: current.dedupeWindowDays,
+    totalImported: (currentStored.totalImported ?? 0) + result.importedCount,
   };
   await db
     .insert(integrationSettingsTable)

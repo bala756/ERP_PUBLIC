@@ -289,6 +289,7 @@ const updateIndiaMartSchema = z.object({
   enabled: z.boolean().optional(),
   intervalMinutes: z.number().int().min(5).max(1440).optional(),
   dedupeWindowDays: z.number().int().min(1).max(365).optional(),
+  apiKey: z.string().optional().nullable(),
 });
 
 router.get(
@@ -317,7 +318,12 @@ router.put(
       {
         audit: "integrationSettings.indiamart.updated",
         actorUserId: req.session.userId,
-        changes: parsed.data,
+        changes: {
+          enabled: parsed.data.enabled,
+          intervalMinutes: parsed.data.intervalMinutes,
+          dedupeWindowDays: parsed.data.dedupeWindowDays,
+          apiKeyChanged: parsed.data.apiKey !== undefined,
+        },
       },
       "IndiaMart settings updated",
     );
