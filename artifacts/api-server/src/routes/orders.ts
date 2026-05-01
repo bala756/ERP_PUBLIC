@@ -1115,6 +1115,85 @@ ordersRouter.post(
   },
 );
 
+const DIRECTOR_ROLES = ["director", "admin"] as const;
+
+ordersRouter.post(
+  "/purchase-orders/:id/director-approve",
+  requireRole(...DIRECTOR_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+
+    const [po] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, id));
+    if (!po) {
+      res.status(404).json({ error: "PO not found" });
+      return;
+    }
+    if (po.status !== "pendingDirectorApproval") {
+      res.status(400).json({ error: `PO is not awaiting director approval. Current status: ${po.status}` });
+      return;
+    }
+
+    const [updated] = await db
+      .update(purchaseOrdersTable)
+      .set({
+        status: "approved",
+        approvedById: req.session.userId,
+        approvedAt: new Date(),
+      })
+      .where(eq(purchaseOrdersTable.id, id))
+      .returning();
+
+    await db
+      .update(workOrderItemsTable)
+      .set({ currentStep: "poApproved" })
+      .where(
+        updated.workOrderItemId
+          ? eq(workOrderItemsTable.id, updated.workOrderItemId)
+          : eq(workOrderItemsTable.workOrderId, updated.workOrderId),
+      );
+
+    const liRows = await db.select().from(poLineItemsTable).where(eq(poLineItemsTable.purchaseOrderId, id));
+    res.json(serializePO({ ...updated, lineItems: liRows }));
+  },
+);
+
+ordersRouter.post(
+  "/purchase-orders/:id/director-reject",
+  requireRole(...DIRECTOR_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+
+    const { rejectionNote } = req.body as { rejectionNote?: string };
+
+    const [existing] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, id));
+    if (!existing) {
+      res.status(404).json({ error: "PO not found" });
+      return;
+    }
+    if (existing.status !== "pendingDirectorApproval") {
+      res.status(400).json({ error: `PO is not awaiting director approval. Current status: ${existing.status}` });
+      return;
+    }
+
+    const [updated] = await db
+      .update(purchaseOrdersTable)
+      .set({ status: "cancelled", rejectionNote: rejectionNote ?? null })
+      .where(eq(purchaseOrdersTable.id, id))
+      .returning();
+
+    const liRows = await db.select().from(poLineItemsTable).where(eq(poLineItemsTable.purchaseOrderId, id));
+    res.json(serializePO({ ...updated, lineItems: liRows }));
+  },
+);
+
 ordersRouter.post(
   "/purchase-orders/:id/receive",
   requireRole(...STOCK_ROLES),

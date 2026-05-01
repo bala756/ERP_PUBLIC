@@ -970,11 +970,13 @@ export default function WorkOrderDetail() {
                                   CFO Req.
                                 </span>
                               )}
-                              <Badge variant={{
+                              <Badge variant={({
                                 draft: "secondary", pendingApproval: "outline",
+                                pendingDirectorApproval: "outline",
                                 approved: "default", received: "secondary", cancelled: "destructive",
-                              }[po.status] as "default" | "secondary" | "outline" | "destructive" || "outline"}>
+                              } as Record<string, "default" | "secondary" | "outline" | "destructive">)[po.status] ?? "outline"}>
                                 {po.status === "pendingApproval" ? "Pending Approval" :
+                                 po.status === "pendingDirectorApproval" ? "Pending Director" :
                                  po.status.charAt(0).toUpperCase() + po.status.slice(1)}
                               </Badge>
                             </div>

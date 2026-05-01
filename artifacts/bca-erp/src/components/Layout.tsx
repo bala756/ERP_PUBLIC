@@ -45,6 +45,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   TrendingUp,
+  Factory,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +71,8 @@ const SECTIONS = [
     items: [
       { title: "Work Orders", url: "/work-orders", icon: Briefcase, roles: ["purchase", "manager", "director", "admin", "production"] },
       { title: "Purchase Requests", url: "/purchase-requests", icon: ClipboardList, roles: ["purchase", "manager", "director", "admin", "production", "stores"] },
-      { title: "Purchase Orders", url: "/purchase-orders", icon: ShoppingCart, roles: ["purchase", "manager", "director", "admin"] },
+      { title: "Mfg Purchase Orders", url: "/purchase-orders/manufacturing", icon: Factory, roles: ["purchase", "manager", "director", "admin"] },
+      { title: "Imported Purchase Orders", url: "/purchase-orders/imported", icon: ShoppingCart, roles: ["purchase", "manager", "director", "admin"] },
       { title: "Imports & Landed Cost", url: "/imports", icon: Ship, roles: ["purchase", "manager", "director", "admin", "cfo", "accounts", "stores"] },
       { title: "Subcontract Jobs", url: "/subcontract-jobs", icon: Wrench, roles: ["purchase", "manager", "director", "admin", "production", "stores"] },
     ],
@@ -165,7 +167,7 @@ export function AppSidebar() {
                         <Link href={item.url} className="flex items-center gap-2">
                           <item.icon className="h-4 w-4" />
                           <span>{item.title}</span>
-                          {item.url === "/purchase-orders" && pendingCount > 0 && (
+                          {item.url === "/purchase-orders/manufacturing" && pendingCount > 0 && (
                             <Badge className="ml-auto h-5 px-1.5 text-xs bg-orange-500 text-white border-0">
                               {pendingCount}
                             </Badge>

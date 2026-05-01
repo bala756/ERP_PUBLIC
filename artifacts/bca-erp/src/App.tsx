@@ -18,7 +18,8 @@ import Proposals from "@/pages/Proposals";
 import ProposalPrint from "@/pages/ProposalPrint";
 import WorkOrders from "@/pages/WorkOrders";
 import WorkOrderDetail from "@/pages/WorkOrderDetail";
-import PurchaseOrders from "@/pages/PurchaseOrders";
+import ManufacturingPurchaseOrders from "@/pages/ManufacturingPurchaseOrders";
+import ImportedPurchaseOrders from "@/pages/ImportedPurchaseOrders";
 import Inventory from "@/pages/Inventory";
 import InventoryLedger from "@/pages/InventoryLedger";
 import BOM from "@/pages/BOM";
@@ -94,7 +95,8 @@ function Router() {
       <Route path="/proposals/:id/print"><ProtectedRoute><ProposalPrint /></ProtectedRoute></Route>
       <Route path="/work-orders"><ProtectedRoute><Layout><WorkOrders /></Layout></ProtectedRoute></Route>
       <Route path="/work-orders/:id"><ProtectedRoute><Layout><WorkOrderDetail /></Layout></ProtectedRoute></Route>
-      <Route path="/purchase-orders"><ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute></Route>
+      <Route path="/purchase-orders/manufacturing"><ProtectedRoute><Layout><ManufacturingPurchaseOrders /></Layout></ProtectedRoute></Route>
+      <Route path="/purchase-orders/imported"><ProtectedRoute><Layout><ImportedPurchaseOrders /></Layout></ProtectedRoute></Route>
       <Route path="/imports"><ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute></Route>
       <Route path="/imports/:id"><ProtectedRoute><Layout><ImportJobDetail /></Layout></ProtectedRoute></Route>
       <Route path="/purchase-requests"><ProtectedRoute><Layout><PurchaseRequests /></Layout></ProtectedRoute></Route>
