@@ -19,7 +19,7 @@ export async function logLeadActivity(
     leadId,
     type,
     actorUserId: actorUserId ?? null,
-    payload: (payload ?? {}) as unknown as object,
+    payload: payload ?? {},
   });
 }
 

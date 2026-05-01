@@ -171,11 +171,12 @@ export function LeadDetailDrawer({ lead, onClose }: LeadDetailDrawerProps) {
       queryClient.invalidateQueries({ queryKey: ["lead-activities", lead?.id] });
       queryClient.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
+      const e = err as { error?: string } | null;
       toast({
         variant: "destructive",
         title: "Failed to reassign",
-        description: err?.error || "Permission denied or invalid request",
+        description: e?.error ?? "Permission denied or invalid request",
       });
     },
   });

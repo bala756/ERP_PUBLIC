@@ -313,12 +313,14 @@ function RuleDialog({
       qc.invalidateQueries({ queryKey: ["lead-routing-rules"] });
       onClose();
     },
-    onError: (err: any) =>
+    onError: (err: unknown) => {
+      const e = err as { error?: string } | null;
       toast({
         variant: "destructive",
         title: "Save failed",
-        description: err?.error || "Check the form values.",
-      }),
+        description: e?.error ?? "Check the form values.",
+      });
+    },
   });
 
   const valid = name.trim() && salespersonId && (statesText.trim() || keywordsText.trim());
