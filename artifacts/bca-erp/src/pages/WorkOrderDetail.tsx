@@ -262,7 +262,13 @@ export default function WorkOrderDetail() {
       onError: (e: Error) => toast({ title: e.message ?? "No stock-out activity to invoice", variant: "destructive" }),
     },
   });
-  const { data: pnl } = useGetWorkOrderPnl(woId ?? 0);
+  const canViewPnl = !!user && ["manager", "director", "admin", "cfo"].includes(user.role);
+  const { data: pnl } = useGetWorkOrderPnl(woId ?? 0, {
+    query: {
+      enabled: !!woId && canViewPnl,
+      queryKey: ["work-order-pnl", woId ?? 0],
+    },
+  });
 
   const canWrite = user && ["sales", "purchase", "manager", "director", "admin", "cfo", "stores", "accounts"].includes(user.role);
   const canApprove = user && APPROVE_ROLES.includes(user.role);

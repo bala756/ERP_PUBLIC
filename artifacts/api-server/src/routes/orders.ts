@@ -498,21 +498,15 @@ ordersRouter.get(
       if (r.workOrderId !== null) subMap.set(r.workOrderId, parseFloat(r.subCost));
     }
 
-    const allWoIds = Array.from(
-      new Set<number>([
-        ...revMap.keys(),
-        ...cogsMap.keys(),
-        ...subMap.keys(),
-      ]),
-    );
-    if (allWoIds.length === 0) {
+    // P&L summary covers every WO so leadership can see zero-activity
+    // jobs (no invoice/no stores-out yet) alongside in-flight ones.
+    // Zero-activity rows simply show 0/0/0 across the cost & revenue
+    // columns instead of being silently omitted.
+    const wos = await db.select().from(workOrdersTable);
+    if (wos.length === 0) {
       res.json([]);
       return;
     }
-    const wos = await db
-      .select()
-      .from(workOrdersTable)
-      .where(inArray(workOrdersTable.id, allWoIds));
 
     const rows = wos.map((wo) => {
       const rev = revMap.get(wo.id);

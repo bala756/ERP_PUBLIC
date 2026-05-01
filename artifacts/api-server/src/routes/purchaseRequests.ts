@@ -671,8 +671,13 @@ purchaseRequestsRouter.post(
     }
 
     const parsed = approveSchema.safeParse(req.body ?? {});
-    const vendorMap =
-      parsed.success && parsed.data ? parsed.data.vendorByItemId ?? {} : {};
+    if (!parsed.success) {
+      res
+        .status(400)
+        .json({ error: "Invalid approve payload", details: parsed.error.format() });
+      return;
+    }
+    const vendorMap = parsed.data.vendorByItemId ?? {};
 
     const [pr] = await db
       .select()

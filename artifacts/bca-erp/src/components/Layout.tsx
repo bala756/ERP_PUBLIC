@@ -100,7 +100,7 @@ const SECTIONS = [
       { title: "Supplier Bills", url: "/supplier-bills", icon: FileCheck, roles: ["accounts", "cfo", "director", "admin", "purchase"] },
       { title: "Expenses", url: "/expenses", icon: Wallet, roles: ["accounts", "cfo", "director", "admin"] },
       { title: "Finance Reports", url: "/gst-summary", icon: BarChart2, roles: ["accounts", "cfo", "director", "admin"] },
-      { title: "Job Profitability", url: "/job-profitability", icon: TrendingUp, roles: ["accounts", "cfo", "director", "admin", "manager"] },
+      { title: "Job Profitability", url: "/job-profitability", icon: TrendingUp, roles: ["cfo", "director", "admin", "manager"] },
     ],
   },
   {
