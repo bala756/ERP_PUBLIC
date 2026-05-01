@@ -49,19 +49,40 @@ async function generateSubcontractJobNumber(): Promise<string> {
 // Source of truth: stock_movements (new). stock_transactions is mirrored for
 // the legacy ledger UI but NOT summed here to avoid double-counting writes
 // that exist in both tables.
+//
+// Perpetual weighted-average over remaining inventory value:
+//   cost = (Σ in_value − Σ out_value) / (Σ in_qty − Σ out_qty)
+// Each OUT row carries its issue-time unit_cost, so subtracting Σ(out qty *
+// out unit_cost) leaves the current on-hand layer's value. After full
+// depletion the basis resets via the most recent IN fallback. This MUST
+// match stockMovements.ts:getMovingAvgCost so subcontract send-out and
+// stores out stamp consistent unit costs.
 async function getMovingAvgCost(itemId: number): Promise<number> {
   const movRes = await db.execute<{ qty: string; cost: string }>(
-    sql`SELECT COALESCE(SUM(qty),0) AS qty,
-               COALESCE(SUM(qty * unit_cost),0) AS cost
-        FROM stock_movements WHERE item_id = ${itemId} AND movement_type = 'in'`,
+    sql`SELECT
+          COALESCE(SUM(CASE WHEN movement_type='in'  THEN qty ELSE -qty END), 0) AS qty,
+          COALESCE(SUM(CASE WHEN movement_type='in'  THEN qty * unit_cost
+                            ELSE -qty * unit_cost END), 0) AS cost
+        FROM stock_movements
+        WHERE item_id = ${itemId}`,
   );
-  const totalQty = parseFloat(
+  const remainingQty = parseFloat(
     (movRes.rows[0] as { qty: string }).qty ?? "0",
   );
-  const totalCost = parseFloat(
+  const remainingCost = parseFloat(
     (movRes.rows[0] as { cost: string }).cost ?? "0",
   );
-  return totalQty > 0 ? totalCost / totalQty : 0;
+  if (remainingQty > 0.0001) {
+    return remainingCost / remainingQty;
+  }
+  const lastIn = await db.execute<{ unit_cost: string }>(
+    sql`SELECT unit_cost FROM stock_movements
+        WHERE item_id = ${itemId} AND movement_type='in'
+        ORDER BY id DESC LIMIT 1`,
+  );
+  return lastIn.rows.length
+    ? parseFloat((lastIn.rows[0] as { unit_cost: string }).unit_cost ?? "0")
+    : 0;
 }
 
 async function getOnHand(itemId: number): Promise<number> {

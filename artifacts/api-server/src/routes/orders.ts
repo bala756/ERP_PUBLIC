@@ -27,7 +27,7 @@ const ordersRouter = Router();
 const VIEW_ROLES = ["sales", "manager", "director", "admin", "cfo", "purchase", "stores", "accounts"] as const;
 // Per-WO Profit & Loss exposes financial margin data and must be tighter
 // than general view access. Only finance/leadership roles can see it.
-const PNL_ROLES = ["manager", "director", "admin", "cfo", "accounts"] as const;
+const PNL_ROLES = ["manager", "director", "admin", "cfo"] as const;
 const PO_CREATE_ROLES = ["purchase", "manager", "director", "admin", "cfo"] as const;
 const APPROVE_ROLES = ["stores", "manager", "director", "admin", "cfo"] as const;
 const STOCK_ROLES = ["stores", "manager", "director", "admin"] as const;
