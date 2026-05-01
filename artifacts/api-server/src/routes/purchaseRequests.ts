@@ -456,14 +456,20 @@ purchaseRequestsRouter.get(
   "/purchase-requests",
   requireRole(...VIEW_ROLES),
   async (req, res) => {
-    const { status, workOrderId } = req.query as {
+    const { status, workOrderId, branch } = req.query as {
       status?: string;
       workOrderId?: string;
+      branch?: string;
     };
     const conds = [] as ReturnType<typeof eq>[];
     if (status) conds.push(eq(purchaseRequestsTable.status, status as never));
     if (workOrderId)
       conds.push(eq(purchaseRequestsTable.workOrderId, Number(workOrderId)));
+    if (branch && (branch === "manufactured" || branch === "raw" || branch === "imported")) {
+      conds.push(
+        sql`EXISTS (SELECT 1 FROM ${purchaseRequestItemsTable} WHERE ${purchaseRequestItemsTable.purchaseRequestId} = ${purchaseRequestsTable.id} AND ${purchaseRequestItemsTable.branch} = ${branch})` as never,
+      );
+    }
 
     const rows = await db
       .select({

@@ -58,10 +58,18 @@ const BRANCH_LABELS: Record<string, string> = {
 export default function PurchaseRequests() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [branchFilter, setBranchFilter] = useState<string>("all");
+  const [woFilter, setWoFilter] = useState<string>("");
   const [openId, setOpenId] = useState<number | null>(null);
 
+  const params: { status?: PurchaseRequest["status"]; branch?: string; workOrderId?: number } = {};
+  if (statusFilter !== "all") params.status = statusFilter as PurchaseRequest["status"];
+  if (branchFilter !== "all") params.branch = branchFilter;
+  const woNum = Number(woFilter);
+  if (woFilter && Number.isFinite(woNum) && woNum > 0) params.workOrderId = woNum;
+
   const { data: rows = [], isLoading } = useGetPurchaseRequests(
-    statusFilter === "all" ? undefined : { status: statusFilter as PurchaseRequest["status"] },
+    Object.keys(params).length ? params : undefined,
   );
 
   return (
@@ -76,10 +84,32 @@ export default function PurchaseRequests() {
             BOM-exploded shortfalls from released Work Orders
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Label className="text-sm">WO #:</Label>
+          <Input
+            type="number"
+            min="1"
+            value={woFilter}
+            onChange={(e) => setWoFilter(e.target.value)}
+            placeholder="e.g. 12"
+            className="h-9 w-28"
+            data-testid="input-pr-wo-filter"
+          />
+          <Label className="text-sm">Branch:</Label>
+          <Select value={branchFilter} onValueChange={setBranchFilter}>
+            <SelectTrigger className="w-40" data-testid="select-pr-branch">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Branches</SelectItem>
+              <SelectItem value="manufactured">Manufactured</SelectItem>
+              <SelectItem value="raw">Raw Material</SelectItem>
+              <SelectItem value="imported">Imported</SelectItem>
+            </SelectContent>
+          </Select>
           <Label className="text-sm">Status:</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44" data-testid="select-pr-status">
+            <SelectTrigger className="w-40" data-testid="select-pr-status">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
