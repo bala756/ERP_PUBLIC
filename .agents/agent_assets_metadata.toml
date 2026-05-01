@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "i1XgUzSkh6TDGqIHPZx6s"
+uri = "file://.local/exports/bca_erp_schema.sql.txt"
+type = "text"
+title = "BCA ERP — PostgreSQL Schema (29 tables, enums, indexes, FKs)"
