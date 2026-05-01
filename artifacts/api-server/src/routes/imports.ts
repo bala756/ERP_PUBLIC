@@ -519,10 +519,12 @@ importsRouter.post(
           createdById: userId ?? null,
         })
         .returning();
-      res.status(201).json(created);
+      return res.status(201).json(created);
     } catch (err) {
       logger.error({ err }, "Failed to create import job");
-      res.status(500).json({ message: "Failed to create import job" });
+      return res
+        .status(500)
+        .json({ message: "Failed to create import job" });
     }
   },
 );
@@ -608,7 +610,7 @@ importsRouter.get(
         purchaseOrder = po ?? null;
       }
 
-      res.json({
+      return res.json({
         ...job.import_jobs,
         createdByName: job.users?.name ?? null,
         purchaseOrder,
@@ -618,7 +620,7 @@ importsRouter.get(
       });
     } catch (err) {
       logger.error({ err }, "Failed to get import job");
-      res.status(500).json({ message: "Failed to get import job" });
+      return res.status(500).json({ message: "Failed to get import job" });
     }
   },
 );
@@ -675,10 +677,12 @@ importsRouter.patch(
       if (data.exchangeRate !== undefined) {
         await recalculateLandedCost(id);
       }
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to update import job");
-      res.status(500).json({ message: "Failed to update import job" });
+      return res
+        .status(500)
+        .json({ message: "Failed to update import job" });
     }
   },
 );
@@ -693,10 +697,12 @@ importsRouter.delete(
       return res.status(400).json({ message: "Invalid id" });
     try {
       await db.delete(importJobsTable).where(eq(importJobsTable.id, id));
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to delete import job");
-      res.status(500).json({ message: "Failed to delete import job" });
+      return res
+        .status(500)
+        .json({ message: "Failed to delete import job" });
     }
   },
 );
@@ -752,10 +758,12 @@ importsRouter.post(
         })
         .returning();
       await recalculateLandedCost(id);
-      res.status(201).json(created);
+      return res.status(201).json(created);
     } catch (err) {
       logger.error({ err }, "Failed to create import item");
-      res.status(500).json({ message: "Failed to create import item" });
+      return res
+        .status(500)
+        .json({ message: "Failed to create import item" });
     }
   },
 );
@@ -804,10 +812,12 @@ importsRouter.patch(
           ),
         );
       await recalculateLandedCost(jobId);
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to update import item");
-      res.status(500).json({ message: "Failed to update import item" });
+      return res
+        .status(500)
+        .json({ message: "Failed to update import item" });
     }
   },
 );
@@ -830,10 +840,12 @@ importsRouter.delete(
           ),
         );
       await recalculateLandedCost(jobId);
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to delete import item");
-      res.status(500).json({ message: "Failed to delete import item" });
+      return res
+        .status(500)
+        .json({ message: "Failed to delete import item" });
     }
   },
 );
@@ -877,10 +889,12 @@ importsRouter.post(
         })
         .returning();
       await recalculateLandedCost(jobId);
-      res.status(201).json(created);
+      return res.status(201).json(created);
     } catch (err) {
       logger.error({ err }, "Failed to create import expense");
-      res.status(500).json({ message: "Failed to create import expense" });
+      return res
+        .status(500)
+        .json({ message: "Failed to create import expense" });
     }
   },
 );
@@ -929,10 +943,12 @@ importsRouter.patch(
           ),
         );
       await recalculateLandedCost(jobId);
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to update import expense");
-      res.status(500).json({ message: "Failed to update import expense" });
+      return res
+        .status(500)
+        .json({ message: "Failed to update import expense" });
     }
   },
 );
@@ -955,10 +971,12 @@ importsRouter.delete(
           ),
         );
       await recalculateLandedCost(jobId);
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to delete import expense");
-      res.status(500).json({ message: "Failed to delete import expense" });
+      return res
+        .status(500)
+        .json({ message: "Failed to delete import expense" });
     }
   },
 );
@@ -973,10 +991,12 @@ importsRouter.post(
       return res.status(400).json({ message: "Invalid id" });
     try {
       await recalculateLandedCost(id);
-      res.json({ ok: true });
+      return res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, "Failed to recalc landed cost");
-      res.status(500).json({ message: "Failed to recalculate landed cost" });
+      return res
+        .status(500)
+        .json({ message: "Failed to recalculate landed cost" });
     }
   },
 );
