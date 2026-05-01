@@ -375,6 +375,11 @@ leadsRouter.delete(
 );
 
 const lineItemSchema = z.object({
+  productId: z.number().int().positive(),
+  productCode: z.string().nullable().optional(),
+  productImageUrl: z.string().nullable().optional(),
+  hsnCode: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(),
   description: z.string().min(1),
   qty: z.number().positive(),
   unitPrice: z.number().min(0),
@@ -384,8 +389,9 @@ const lineItemSchema = z.object({
 const createProposalSchema = z.object({
   leadId: z.number().int(),
   salespersonId: z.number().int().optional(),
-  lineItems: z.array(lineItemSchema).default([]),
+  lineItems: z.array(lineItemSchema).min(1, "At least one product line item is required"),
   discountPercent: z.number().min(0).max(100).default(0),
+  packingChargesPercent: z.number().min(0).max(100).default(0),
   gstRate: z.number().min(0).max(100).default(18),
   validUntil: z.string().optional(),
   notes: z.string().optional(),
@@ -397,6 +403,7 @@ const updateProposalSchema = createProposalSchema.partial().omit({ leadId: true 
 function calcTotals(
   lineItems: Array<{ qty: number; unitPrice: number; gstRate: number }>,
   discountPercent: number,
+  packingChargesPercent: number,
   gstRate: number,
 ) {
   const lineSubtotal = lineItems.reduce(
@@ -404,12 +411,14 @@ function calcTotals(
     0,
   );
   const discountAmount = (lineSubtotal * discountPercent) / 100;
-  const taxable = lineSubtotal - discountAmount;
+  const packingChargesAmount = (lineSubtotal * packingChargesPercent) / 100;
+  const taxable = lineSubtotal - discountAmount + packingChargesAmount;
   const gstAmount = (taxable * gstRate) / 100;
   const total = taxable + gstAmount;
   return {
     subtotal: lineSubtotal.toFixed(2),
     discountAmount: discountAmount.toFixed(2),
+    packingChargesAmount: packingChargesAmount.toFixed(2),
     gstAmount: gstAmount.toFixed(2),
     total: total.toFixed(2),
   };
@@ -441,9 +450,11 @@ function serializeProposal(
     salespersonName: proposal.salesperson?.name ?? null,
     lineItems,
     discountPercent: parseFloat(proposal.discountPercent),
+    packingChargesPercent: parseFloat(proposal.packingChargesPercent ?? "0"),
     gstRate: parseFloat(proposal.gstRate),
     subtotal: parseFloat(proposal.subtotal),
     discountAmount: parseFloat(proposal.discountAmount),
+    packingChargesAmount: parseFloat(proposal.packingChargesAmount ?? "0"),
     gstAmount: parseFloat(proposal.gstAmount),
     total: parseFloat(proposal.total),
     status: proposal.status,
@@ -551,18 +562,35 @@ leadsRouter.post(
       return;
     }
 
-    const { lineItems, discountPercent, gstRate, ...rest } = parsed.data;
-    const totals = calcTotals(lineItems, discountPercent, gstRate);
+    const { lineItems, discountPercent, packingChargesPercent, gstRate, ...rest } =
+      parsed.data;
+    const totals = calcTotals(
+      lineItems,
+      discountPercent,
+      packingChargesPercent,
+      gstRate,
+    );
     const proposalNumber = await generateProposalNumber();
+
+    let salespersonId = rest.salespersonId;
+    if (salespersonId === undefined || salespersonId === null) {
+      const [leadRow] = await db
+        .select({ assignedToId: leadsTable.assignedToId })
+        .from(leadsTable)
+        .where(eq(leadsTable.id, parsed.data.leadId));
+      if (leadRow?.assignedToId) salespersonId = leadRow.assignedToId;
+    }
 
     const insertStatus = rest.status ?? "draft";
     const [proposal] = await db
       .insert(proposalsTable)
       .values({
         ...rest,
+        salespersonId,
         proposalNumber,
         lineItems: lineItems as unknown[],
         discountPercent: discountPercent.toString(),
+        packingChargesPercent: packingChargesPercent.toString(),
         gstRate: gstRate.toString(),
         ...totals,
         onHoldAt: insertStatus === "onHold" ? new Date() : undefined,
@@ -806,7 +834,14 @@ leadsRouter.patch(
       return;
     }
 
-    const { lineItems, discountPercent, gstRate, status, ...rest } = parsed.data;
+    const {
+      lineItems,
+      discountPercent,
+      packingChargesPercent,
+      gstRate,
+      status,
+      ...rest
+    } = parsed.data;
 
     const [existing] = await db
       .select()
@@ -822,6 +857,8 @@ leadsRouter.patch(
     if (lineItems !== undefined) updateData.lineItems = lineItems;
     if (discountPercent !== undefined)
       updateData.discountPercent = discountPercent.toString();
+    if (packingChargesPercent !== undefined)
+      updateData.packingChargesPercent = packingChargesPercent.toString();
     if (gstRate !== undefined) updateData.gstRate = gstRate.toString();
     if (status !== undefined) {
       updateData.status = status;
@@ -834,6 +871,7 @@ leadsRouter.patch(
     if (
       lineItems !== undefined ||
       discountPercent !== undefined ||
+      packingChargesPercent !== undefined ||
       gstRate !== undefined
     ) {
       const items = lineItems ??
@@ -846,8 +884,11 @@ leadsRouter.patch(
           : []);
       const disc =
         discountPercent ?? parseFloat(existing.discountPercent);
+      const pack =
+        packingChargesPercent ??
+        parseFloat(existing.packingChargesPercent ?? "0");
       const gst = gstRate ?? parseFloat(existing.gstRate);
-      const totals = calcTotals(items, disc, gst);
+      const totals = calcTotals(items, disc, pack, gst);
       Object.assign(updateData, totals);
     }
 

@@ -65,7 +65,10 @@ import {
   Bell,
   Trash,
   Printer,
+  Package,
 } from "lucide-react";
+import { ProductPicker, type PickedProduct } from "@/components/ProductPicker";
+import { objectPathToUrl } from "@/lib/uploadFile";
 import { useForm } from "react-hook-form";
 import {
   Form,
@@ -471,6 +474,11 @@ function ProposalActions({
 }
 
 interface LineItemRow {
+  productId: number;
+  productCode: string;
+  productImageUrl: string | null;
+  hsnCode: string | null;
+  unit: string;
   description: string;
   qty: number;
   unitPrice: number;
@@ -484,53 +492,104 @@ function LineItemsEditor({
   value: LineItemRow[];
   onChange: (items: LineItemRow[]) => void;
 }) {
-  const addRow = () =>
-    onChange([...value, { description: "", qty: 1, unitPrice: 0, gstRate: 18 }]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  const removeRow = (i: number) => onChange(value.filter((_, idx) => idx !== i));
+  const removeRow = (i: number) =>
+    onChange(value.filter((_, idx) => idx !== i));
 
-  const updateRow = (i: number, field: keyof LineItemRow, v: string) => {
+  const updateRow = (
+    i: number,
+    field: "description" | "qty" | "unitPrice" | "gstRate",
+    v: string,
+  ) => {
     const rows = [...value];
     if (field === "description") rows[i] = { ...rows[i], [field]: v };
     else rows[i] = { ...rows[i], [field]: parseFloat(v) || 0 };
     onChange(rows);
   };
 
+  const handlePick = (p: PickedProduct) => {
+    onChange([
+      ...value,
+      {
+        productId: p.productId,
+        productCode: p.productCode,
+        productImageUrl: p.productImageUrl,
+        hsnCode: p.hsnCode,
+        unit: p.unit,
+        description: p.description,
+        qty: 1,
+        unitPrice: p.unitPrice,
+        gstRate: p.gstRate,
+      },
+    ]);
+  };
+
   const subtotal = value.reduce((s, li) => s + li.qty * li.unitPrice, 0);
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-[1fr_80px_100px_80px_32px] gap-1 text-xs font-medium text-muted-foreground px-1">
-        <span>Description</span>
+      <div className="grid grid-cols-[44px_1fr_70px_100px_70px_32px] gap-1 text-xs font-medium text-muted-foreground px-1">
+        <span>Img</span>
+        <span>Product / Description</span>
         <span>Qty</span>
         <span>Unit Price</span>
         <span>GST%</span>
         <span />
       </div>
+      {value.length === 0 && (
+        <div className="text-xs text-muted-foreground italic px-1 py-2">
+          No products selected. Click below to pick from the Product Master.
+        </div>
+      )}
       {value.map((item, i) => (
         <div
-          key={i}
-          className="grid grid-cols-[1fr_80px_100px_80px_32px] gap-1 items-center"
+          key={`${item.productId}-${i}`}
+          className="grid grid-cols-[44px_1fr_70px_100px_70px_32px] gap-1 items-start"
         >
-          <Input
-            value={item.description}
-            onChange={(e) => updateRow(i, "description", e.target.value)}
-            placeholder="Item description"
-            className="h-8 text-sm"
-          />
+          <div className="h-9 w-9 rounded bg-muted overflow-hidden flex items-center justify-center mt-1">
+            {item.productImageUrl ? (
+              <img
+                src={objectPathToUrl(item.productImageUrl)}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <Package className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground font-mono">
+              {item.productCode}
+              {item.hsnCode ? ` • HSN ${item.hsnCode}` : ""}
+              {item.unit ? ` • ${item.unit}` : ""}
+            </div>
+            <Textarea
+              value={item.description}
+              onChange={(e) => updateRow(i, "description", e.target.value)}
+              placeholder="Description"
+              rows={2}
+              className="text-sm"
+              data-testid={`textarea-line-description-${i}`}
+            />
+          </div>
           <Input
             type="number"
             value={item.qty}
             min={0}
+            step={0.01}
             onChange={(e) => updateRow(i, "qty", e.target.value)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
+            data-testid={`input-line-qty-${i}`}
           />
           <Input
             type="number"
             value={item.unitPrice}
             min={0}
+            step={0.01}
             onChange={(e) => updateRow(i, "unitPrice", e.target.value)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
+            data-testid={`input-line-unitprice-${i}`}
           />
           <Input
             type="number"
@@ -538,13 +597,13 @@ function LineItemsEditor({
             min={0}
             max={100}
             onChange={(e) => updateRow(i, "gstRate", e.target.value)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
           />
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-9 w-8"
             onClick={() => removeRow(i)}
           >
             <Trash className="h-3.5 w-3.5 text-destructive" />
@@ -556,11 +615,18 @@ function LineItemsEditor({
         variant="outline"
         size="sm"
         className="mt-1"
-        onClick={addRow}
+        onClick={() => setPickerOpen(true)}
+        data-testid="button-add-product"
       >
         <Plus className="h-3.5 w-3.5 mr-1" />
-        Add Line Item
+        Add Product
       </Button>
+      <ProductPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={handlePick}
+        mode="sale"
+      />
       <div className="text-right text-sm text-muted-foreground">
         Subtotal: {formatINR(subtotal)}
       </div>
@@ -571,15 +637,18 @@ function LineItemsEditor({
 function TotalsPreview({
   lineItems,
   discountPercent,
+  packingChargesPercent,
   gstRate,
 }: {
   lineItems: LineItemRow[];
   discountPercent: number;
+  packingChargesPercent: number;
   gstRate: number;
 }) {
   const subtotal = lineItems.reduce((s, li) => s + li.qty * li.unitPrice, 0);
   const discountAmount = (subtotal * discountPercent) / 100;
-  const taxable = subtotal - discountAmount;
+  const packingChargesAmount = (subtotal * packingChargesPercent) / 100;
+  const taxable = subtotal - discountAmount + packingChargesAmount;
   const gstAmount = (taxable * gstRate) / 100;
   const total = taxable + gstAmount;
 
@@ -593,6 +662,14 @@ function TotalsPreview({
         <div className="flex justify-between text-amber-600">
           <span>Discount ({discountPercent}%)</span>
           <span>- {formatINR(discountAmount)}</span>
+        </div>
+      )}
+      {packingChargesPercent > 0 && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">
+            Packing Charges ({packingChargesPercent}%)
+          </span>
+          <span>+ {formatINR(packingChargesAmount)}</span>
         </div>
       )}
       <div className="flex justify-between text-muted-foreground">
@@ -628,26 +705,37 @@ function CreateProposalDialog({
   const queryClient = useQueryClient();
   const createMutation = useCreateProposal();
 
-  const [lineItems, setLineItems] = useState<LineItemRow[]>([
-    { description: "", qty: 1, unitPrice: 0, gstRate: 18 },
-  ]);
+  const [lineItems, setLineItems] = useState<LineItemRow[]>([]);
   const [leadId, setLeadId] = useState<string>(preselectedLeadId ?? "");
-
-  React.useEffect(() => {
-    if (open && preselectedLeadId) setLeadId(preselectedLeadId);
-  }, [open, preselectedLeadId]);
   const [salespersonId, setSalespersonId] = useState<string>("");
+  const [salespersonTouched, setSalespersonTouched] = useState(false);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [packingChargesPercent, setPackingChargesPercent] = useState<number>(0);
   const [gstRate, setGstRate] = useState<number>(18);
   const [validUntil, setValidUntil] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [status, setStatus] = useState<string>("draft");
 
+  React.useEffect(() => {
+    if (open && preselectedLeadId) setLeadId(preselectedLeadId);
+  }, [open, preselectedLeadId]);
+
+  // Auto-fill salesperson from selected lead's assignedToId, until user overrides
+  React.useEffect(() => {
+    if (!leadId || salespersonTouched) return;
+    const lead = leads.find((l) => l.id === parseInt(leadId, 10));
+    if (lead?.assignedToId) {
+      setSalespersonId(String(lead.assignedToId));
+    }
+  }, [leadId, leads, salespersonTouched]);
+
   const reset = () => {
-    setLineItems([{ description: "", qty: 1, unitPrice: 0, gstRate: 18 }]);
+    setLineItems([]);
     setLeadId("");
     setSalespersonId("");
+    setSalespersonTouched(false);
     setDiscountPercent(0);
+    setPackingChargesPercent(0);
     setGstRate(18);
     setValidUntil("");
     setNotes("");
@@ -660,14 +748,25 @@ function CreateProposalDialog({
       toast({ variant: "destructive", title: "Please select a lead" });
       return;
     }
+    const validRows = lineItems.filter(
+      (li) => li.productId > 0 && li.description.trim() && li.qty > 0,
+    );
+    if (validRows.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Add at least one product line item",
+      });
+      return;
+    }
 
     createMutation.mutate(
       {
         data: {
           leadId: parseInt(leadId, 10),
           salespersonId: salespersonId ? parseInt(salespersonId, 10) : undefined,
-          lineItems: lineItems.filter((li) => li.description.trim()),
+          lineItems: validRows,
           discountPercent,
+          packingChargesPercent,
           gstRate,
           validUntil: validUntil || undefined,
           notes: notes || undefined,
@@ -714,8 +813,14 @@ function CreateProposalDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sales-select">Salesperson</Label>
-              <Select value={salespersonId} onValueChange={setSalespersonId}>
-                <SelectTrigger id="sales-select">
+              <Select
+                value={salespersonId}
+                onValueChange={(v) => {
+                  setSalespersonTouched(true);
+                  setSalespersonId(v);
+                }}
+              >
+                <SelectTrigger id="sales-select" data-testid="select-create-salesperson">
                   <SelectValue placeholder="Select salesperson" />
                 </SelectTrigger>
                 <SelectContent>
@@ -738,13 +843,13 @@ function CreateProposalDialog({
             <LineItemsEditor value={lineItems} onChange={setLineItems} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="discount">
                 Discount %{" "}
                 {!canApproveDiscount && (
                   <span className="text-xs text-muted-foreground">
-                    (max {DISCOUNT_LIMIT_NO_APPROVAL}% — manager approval needed for higher)
+                    (max {DISCOUNT_LIMIT_NO_APPROVAL}%)
                   </span>
                 )}
               </Label>
@@ -760,6 +865,20 @@ function CreateProposalDialog({
                   setDiscountPercent(Math.min(val, cap));
                 }}
                 data-testid="input-discount"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="packing">Packing Charges %</Label>
+              <Input
+                id="packing"
+                type="number"
+                min={0}
+                max={100}
+                value={packingChargesPercent}
+                onChange={(e) =>
+                  setPackingChargesPercent(parseFloat(e.target.value) || 0)
+                }
+                data-testid="input-packing"
               />
             </div>
             <div className="space-y-1.5">
@@ -779,6 +898,7 @@ function CreateProposalDialog({
           <TotalsPreview
             lineItems={lineItems}
             discountPercent={discountPercent}
+            packingChargesPercent={packingChargesPercent}
             gstRate={gstRate}
           />
 
@@ -856,15 +976,25 @@ function EditProposalDialog({
   const updateMutation = useUpdateProposal();
 
   const [lineItems, setLineItems] = useState<LineItemRow[]>(
-    (proposal.lineItems as LineItemRow[]).map((li) => ({
-      description: li.description,
-      qty: li.qty,
-      unitPrice: li.unitPrice,
-      gstRate: li.gstRate ?? 18,
-    })),
+    (proposal.lineItems as Array<Partial<LineItemRow> & { description: string; qty: number; unitPrice: number }>).map(
+      (li) => ({
+        productId: li.productId ?? 0,
+        productCode: li.productCode ?? "",
+        productImageUrl: li.productImageUrl ?? null,
+        hsnCode: li.hsnCode ?? null,
+        unit: li.unit ?? "",
+        description: li.description,
+        qty: li.qty,
+        unitPrice: li.unitPrice,
+        gstRate: li.gstRate ?? 18,
+      }),
+    ),
   );
   const [discountPercent, setDiscountPercent] = useState<number>(
     proposal.discountPercent,
+  );
+  const [packingChargesPercent, setPackingChargesPercent] = useState<number>(
+    (proposal as { packingChargesPercent?: number }).packingChargesPercent ?? 0,
   );
   const [gstRate, setGstRate] = useState<number>(proposal.gstRate);
   const [validUntil, setValidUntil] = useState<string>(proposal.validUntil ?? "");
@@ -876,13 +1006,24 @@ function EditProposalDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const validRows = lineItems.filter(
+      (li) => li.productId > 0 && li.description.trim() && li.qty > 0,
+    );
+    if (validRows.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Add at least one product line item",
+      });
+      return;
+    }
     updateMutation.mutate(
       {
         id: proposal.id,
         data: {
           salespersonId: salespersonId ? parseInt(salespersonId, 10) : undefined,
-          lineItems: lineItems.filter((li) => li.description.trim()),
+          lineItems: validRows,
           discountPercent,
+          packingChargesPercent,
           gstRate,
           validUntil: validUntil || undefined,
           notes: notes || undefined,
@@ -944,7 +1085,7 @@ function EditProposalDialog({
             <LineItemsEditor value={lineItems} onChange={setLineItems} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label>
                 Discount %{" "}
@@ -967,6 +1108,19 @@ function EditProposalDialog({
               />
             </div>
             <div className="space-y-1.5">
+              <Label>Packing Charges %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={packingChargesPercent}
+                onChange={(e) =>
+                  setPackingChargesPercent(parseFloat(e.target.value) || 0)
+                }
+                data-testid="input-edit-packing"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label>GST Rate %</Label>
               <Input
                 type="number"
@@ -981,6 +1135,7 @@ function EditProposalDialog({
           <TotalsPreview
             lineItems={lineItems}
             discountPercent={discountPercent}
+            packingChargesPercent={packingChargesPercent}
             gstRate={gstRate}
           />
 

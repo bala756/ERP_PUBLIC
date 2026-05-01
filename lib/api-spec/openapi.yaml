@@ -40,6 +40,10 @@ tags:
     description: Service order management
   - name: approvals
     description: Approval workflow
+  - name: storage
+    description: Object storage uploads and serving
+  - name: app-settings
+    description: Application-wide settings (proposal print template, branding)
 paths:
   /healthz:
     get:
@@ -1975,6 +1979,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/GstItcSummary"
 
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      summary: Request a presigned URL to upload a file directly to object storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestUploadUrlBody"
+      responses:
+        "200":
+          description: Presigned upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestUploadUrlResponse"
+
+  /app-settings:
+    get:
+      operationId: getAppSettings
+      tags: [app-settings]
+      summary: Get the singleton app settings (proposal print template, branding)
+      responses:
+        "200":
+          description: App settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+    put:
+      operationId: updateAppSettings
+      tags: [app-settings]
+      summary: Update app settings (admin/director/cfo only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAppSettingsBody"
+      responses:
+        "200":
+          description: Updated app settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -2285,6 +2344,22 @@ components:
     ProposalLineItem:
       type: object
       properties:
+        productId:
+          type: integer
+          nullable: true
+          description: Product Master id (required for new line items, null for legacy)
+        productCode:
+          type: string
+          nullable: true
+        productImageUrl:
+          type: string
+          nullable: true
+        hsnCode:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
         description:
           type: string
         qty:
@@ -2325,11 +2400,15 @@ components:
             $ref: "#/components/schemas/ProposalLineItem"
         discountPercent:
           type: number
+        packingChargesPercent:
+          type: number
         gstRate:
           type: number
         subtotal:
           type: number
         discountAmount:
+          type: number
+        packingChargesAmount:
           type: number
         gstAmount:
           type: number
@@ -2356,9 +2435,11 @@ components:
         - leadId
         - lineItems
         - discountPercent
+        - packingChargesPercent
         - gstRate
         - subtotal
         - discountAmount
+        - packingChargesAmount
         - gstAmount
         - total
         - status
@@ -2378,6 +2459,8 @@ components:
           items:
             $ref: "#/components/schemas/ProposalLineItem"
         discountPercent:
+          type: number
+        packingChargesPercent:
           type: number
         gstRate:
           type: number
@@ -2401,6 +2484,8 @@ components:
           items:
             $ref: "#/components/schemas/ProposalLineItem"
         discountPercent:
+          type: number
+        packingChargesPercent:
           type: number
         gstRate:
           type: number
@@ -2467,6 +2552,21 @@ components:
           type: integer
         purchaseOrderId:
           type: integer
+        productId:
+          type: integer
+          nullable: true
+        productCode:
+          type: string
+          nullable: true
+        productImageUrl:
+          type: string
+          nullable: true
+        hsnCode:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
         description:
           type: string
         qty:
@@ -2843,6 +2943,19 @@ components:
           items:
             type: object
             properties:
+              productId:
+                type: integer
+                description: ID of inventory_items master record (required for new POs)
+              productCode:
+                type: string
+              productImageUrl:
+                type: string
+                nullable: true
+              hsnCode:
+                type: string
+                nullable: true
+              unit:
+                type: string
               description:
                 type: string
               qty:
@@ -2879,6 +2992,7 @@ components:
           type: integer
         itemCode:
           type: string
+          nullable: true
         name:
           type: string
         category:
@@ -2896,6 +3010,33 @@ components:
         description:
           type: string
           nullable: true
+        longDescription:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        defaultSalePrice:
+          type: number
+        defaultPurchasePrice:
+          type: number
+        bomTemplateId:
+          type: integer
+          nullable: true
+        lengthM:
+          type: number
+        widthM:
+          type: number
+        heightM:
+          type: number
+        unitCbm:
+          type: number
+        grossWeightKg:
+          type: number
+        netWeightKg:
+          type: number
+        dutyPercent:
+          type: number
         isActive:
           type: boolean
         stockBalance:
@@ -2908,12 +3049,20 @@ components:
           type: string
       required:
         - id
-        - itemCode
         - name
         - category
         - unit
         - gstRate
         - reorderLevel
+        - defaultSalePrice
+        - defaultPurchasePrice
+        - lengthM
+        - widthM
+        - heightM
+        - unitCbm
+        - grossWeightKg
+        - netWeightKg
+        - dutyPercent
         - isActive
         - stockBalance
         - isLowStock
@@ -2940,8 +3089,32 @@ components:
           type: number
         description:
           type: string
+        longDescription:
+          type: string
+        imageUrl:
+          type: string
+        defaultSalePrice:
+          type: number
+        defaultPurchasePrice:
+          type: number
+        bomTemplateId:
+          type: integer
+          nullable: true
+        lengthM:
+          type: number
+        widthM:
+          type: number
+        heightM:
+          type: number
+        unitCbm:
+          type: number
+        grossWeightKg:
+          type: number
+        netWeightKg:
+          type: number
+        dutyPercent:
+          type: number
       required:
-        - itemCode
         - name
 
     UpdateInventoryItemBody:
@@ -2964,6 +3137,32 @@ components:
           type: number
         description:
           type: string
+        longDescription:
+          type: string
+        imageUrl:
+          type: string
+          nullable: true
+        defaultSalePrice:
+          type: number
+        defaultPurchasePrice:
+          type: number
+        bomTemplateId:
+          type: integer
+          nullable: true
+        lengthM:
+          type: number
+        widthM:
+          type: number
+        heightM:
+          type: number
+        unitCbm:
+          type: number
+        grossWeightKg:
+          type: number
+        netWeightKg:
+          type: number
+        dutyPercent:
+          type: number
         isActive:
           type: boolean
 
@@ -4410,3 +4609,110 @@ components:
         - inputITC
         - outputGST
         - netPayable
+
+    RequestUploadUrlBody:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        contentType:
+          type: string
+      required:
+        - name
+        - size
+        - contentType
+
+    RequestUploadUrlResponse:
+      type: object
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+            size:
+              type: integer
+            contentType:
+              type: string
+          required:
+            - name
+            - size
+            - contentType
+      required:
+        - uploadURL
+        - objectPath
+        - metadata
+
+    AppSettings:
+      type: object
+      properties:
+        id:
+          type: integer
+        companyName:
+          type: string
+        companyAddress:
+          type: string
+          nullable: true
+        companyGstin:
+          type: string
+          nullable: true
+        companyPhone:
+          type: string
+          nullable: true
+        companyEmail:
+          type: string
+          nullable: true
+        companyWebsite:
+          type: string
+          nullable: true
+        companyLogoUrl:
+          type: string
+          nullable: true
+        proposalFooterNotes:
+          type: string
+          nullable: true
+        proposalTermsAndConditions:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+      required:
+        - id
+        - companyName
+        - updatedAt
+
+    UpdateAppSettingsBody:
+      type: object
+      properties:
+        companyName:
+          type: string
+        companyAddress:
+          type: string
+          nullable: true
+        companyGstin:
+          type: string
+          nullable: true
+        companyPhone:
+          type: string
+          nullable: true
+        companyEmail:
+          type: string
+          nullable: true
+        companyWebsite:
+          type: string
+          nullable: true
+        companyLogoUrl:
+          type: string
+          nullable: true
+        proposalFooterNotes:
+          type: string
+          nullable: true
+        proposalTermsAndConditions:
+          type: string
+          nullable: true

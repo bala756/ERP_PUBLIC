@@ -7,6 +7,7 @@ import {
   timestamp,
   boolean,
   numeric,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { usersTable } from "./users";
@@ -143,6 +144,11 @@ export const poLineItemsTable = pgTable("po_line_items", {
   purchaseOrderId: integer("purchase_order_id")
     .notNull()
     .references(() => purchaseOrdersTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id"),
+  productCode: text("product_code"),
+  productImageUrl: text("product_image_url"),
+  hsnCode: varchar("hsn_code", { length: 20 }),
+  unit: varchar("unit", { length: 20 }),
   description: text("description").notNull(),
   qty: text("qty").notNull().default("1"),
   unitPrice: text("unit_price").notNull().default("0"),

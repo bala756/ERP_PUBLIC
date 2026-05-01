@@ -1,9 +1,13 @@
 import React, { useEffect } from "react";
 import { useParams } from "wouter";
-import { useGetProposal } from "@workspace/api-client-react";
+import {
+  useGetProposal,
+  useGetAppSettings,
+} from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { Printer, Package } from "lucide-react";
+import { objectPathToUrl } from "@/lib/uploadFile";
 
 const formatINR = (v: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -13,6 +17,11 @@ const formatINR = (v: number) =>
   }).format(v);
 
 interface LineItem {
+  productId?: number;
+  productCode?: string;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string;
   description: string;
   qty: number;
   unitPrice: number;
@@ -24,15 +33,18 @@ export default function ProposalPrint() {
   const proposalId = parseInt(params.id ?? "0", 10);
 
   const { data: proposal, isLoading, isError } = useGetProposal(proposalId);
+  const { data: settings } = useGetAppSettings();
+
+  const companyName = settings?.companyName ?? "BCA Entertainment Works";
 
   useEffect(() => {
     if (proposal) {
-      document.title = `${proposal.proposalNumber} — BCA Entertainment Works`;
+      document.title = `${proposal.proposalNumber} — ${companyName}`;
     }
     return () => {
-      document.title = "BCA Entertainment Works ERP";
+      document.title = `${companyName} ERP`;
     };
-  }, [proposal]);
+  }, [proposal, companyName]);
 
   if (isLoading) {
     return (
@@ -57,6 +69,10 @@ export default function ProposalPrint() {
     (s, li) => s + li.qty * li.unitPrice,
     0,
   );
+  const packingChargesAmount =
+    (proposal as { packingChargesAmount?: number }).packingChargesAmount ?? 0;
+  const packingChargesPercent =
+    (proposal as { packingChargesPercent?: number }).packingChargesPercent ?? 0;
 
   return (
     <>
@@ -69,16 +85,35 @@ export default function ProposalPrint() {
       </div>
 
       <div className="max-w-3xl mx-auto p-10 print:p-0 space-y-8 font-sans text-sm text-foreground print:text-black">
-        <header className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              BCA Entertainment Works
-            </h1>
-            <p className="text-muted-foreground print:text-gray-500 text-xs mt-1">
-              Entertainment Production &amp; Event Management
-            </p>
+        <header className="flex items-start justify-between gap-6">
+          <div className="flex items-start gap-4">
+            {settings?.companyLogoUrl && (
+              <img
+                src={objectPathToUrl(settings.companyLogoUrl)}
+                alt={companyName}
+                className="h-16 w-16 object-contain"
+              />
+            )}
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{companyName}</h1>
+              {settings?.companyAddress && (
+                <p className="text-muted-foreground print:text-gray-600 text-xs mt-1 whitespace-pre-line">
+                  {settings.companyAddress}
+                </p>
+              )}
+              <div className="text-muted-foreground print:text-gray-500 text-xs mt-1 space-x-2">
+                {settings?.companyPhone && <span>Tel: {settings.companyPhone}</span>}
+                {settings?.companyEmail && <span>Email: {settings.companyEmail}</span>}
+                {settings?.companyWebsite && <span>{settings.companyWebsite}</span>}
+              </div>
+              {settings?.companyGstin && (
+                <p className="text-xs text-muted-foreground print:text-gray-500 mt-0.5">
+                  GSTIN: {settings.companyGstin}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
             <p className="text-xl font-semibold">{proposal.proposalNumber}</p>
             <p className="text-muted-foreground print:text-gray-500 text-xs mt-1">
               Created:{" "}
@@ -129,15 +164,15 @@ export default function ProposalPrint() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b-2 border-foreground print:border-black text-left">
-                <th className="pb-2 font-semibold w-[50%]">Description</th>
-                <th className="pb-2 font-semibold text-right w-[10%]">Qty</th>
-                <th className="pb-2 font-semibold text-right w-[20%]">
+                <th className="pb-2 font-semibold w-[60px]">Image</th>
+                <th className="pb-2 font-semibold">Description</th>
+                <th className="pb-2 font-semibold text-center w-[70px]">HSN</th>
+                <th className="pb-2 font-semibold text-right w-[60px]">Qty</th>
+                <th className="pb-2 font-semibold text-right w-[100px]">
                   Unit Price
                 </th>
-                <th className="pb-2 font-semibold text-right w-[10%]">
-                  GST%
-                </th>
-                <th className="pb-2 font-semibold text-right w-[20%]">
+                <th className="pb-2 font-semibold text-right w-[60px]">GST%</th>
+                <th className="pb-2 font-semibold text-right w-[110px]">
                   Amount
                 </th>
               </tr>
@@ -146,9 +181,37 @@ export default function ProposalPrint() {
               {lineItems.map((li, i) => (
                 <tr
                   key={i}
-                  className="border-b border-border print:border-gray-200"
+                  className="border-b border-border print:border-gray-200 align-top"
                 >
-                  <td className="py-2">{li.description}</td>
+                  <td className="py-2">
+                    <div className="h-12 w-12 rounded bg-muted print:bg-gray-100 overflow-hidden flex items-center justify-center">
+                      {li.productImageUrl ? (
+                        <img
+                          src={objectPathToUrl(li.productImageUrl)}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2 pr-2">
+                    {li.productCode && (
+                      <div className="text-xs font-mono text-muted-foreground print:text-gray-500">
+                        {li.productCode}
+                      </div>
+                    )}
+                    <div className="whitespace-pre-wrap">{li.description}</div>
+                    {li.unit && (
+                      <div className="text-xs text-muted-foreground print:text-gray-500">
+                        Unit: {li.unit}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-2 text-center text-xs">
+                    {li.hsnCode ?? "—"}
+                  </td>
                   <td className="py-2 text-right">{li.qty}</td>
                   <td className="py-2 text-right">{formatINR(li.unitPrice)}</td>
                   <td className="py-2 text-right">{li.gstRate}%</td>
@@ -161,7 +224,7 @@ export default function ProposalPrint() {
           </table>
 
           <div className="mt-4 flex justify-end">
-            <div className="w-64 space-y-1.5 text-sm">
+            <div className="w-72 space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground print:text-gray-600">
                   Subtotal
@@ -172,6 +235,14 @@ export default function ProposalPrint() {
                 <div className="flex justify-between text-red-600">
                   <span>Discount ({proposal.discountPercent}%)</span>
                   <span>- {formatINR(proposal.discountAmount)}</span>
+                </div>
+              )}
+              {packingChargesPercent > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground print:text-gray-600">
+                    Packing Charges ({packingChargesPercent}%)
+                  </span>
+                  <span>+ {formatINR(packingChargesAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between">
@@ -197,9 +268,20 @@ export default function ProposalPrint() {
           </section>
         )}
 
-        <footer className="border-t pt-4 text-xs text-muted-foreground print:text-gray-500 text-center">
-          BCA Entertainment Works — This is a computer-generated proposal and
-          does not require a signature.
+        {settings?.proposalTermsAndConditions && (
+          <section className="border-t pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground print:text-gray-500 mb-1">
+              Terms &amp; Conditions
+            </p>
+            <p className="whitespace-pre-wrap text-xs leading-relaxed">
+              {settings.proposalTermsAndConditions}
+            </p>
+          </section>
+        )}
+
+        <footer className="border-t pt-4 text-xs text-muted-foreground print:text-gray-500 text-center whitespace-pre-line">
+          {settings?.proposalFooterNotes ??
+            `${companyName} — This is a computer-generated proposal and does not require a signature.`}
         </footer>
       </div>
 
@@ -210,6 +292,7 @@ export default function ProposalPrint() {
           .print\\:text-black { color: black !important; }
           .print\\:text-gray-500 { color: #6b7280 !important; }
           .print\\:text-gray-600 { color: #4b5563 !important; }
+          .print\\:bg-gray-100 { background-color: #f3f4f6 !important; }
           .print\\:border-black { border-color: black !important; }
           .print\\:border-gray-200 { border-color: #e5e7eb !important; }
           body { print-color-adjust: exact; }

@@ -388,6 +388,16 @@ export const GetProposalsResponseItem = zod.object({
   salespersonName: zod.string().nullish(),
   lineItems: zod.array(
     zod.object({
+      productId: zod
+        .number()
+        .nullish()
+        .describe(
+          "Product Master id (required for new line items, null for legacy)",
+        ),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -395,9 +405,11 @@ export const GetProposalsResponseItem = zod.object({
     }),
   ),
   discountPercent: zod.number(),
+  packingChargesPercent: zod.number(),
   gstRate: zod.number(),
   subtotal: zod.number(),
   discountAmount: zod.number(),
+  packingChargesAmount: zod.number(),
   gstAmount: zod.number(),
   total: zod.number(),
   status: zod.enum(["draft", "sent", "won", "onHold", "lost"]),
@@ -418,6 +430,16 @@ export const CreateProposalBody = zod.object({
   lineItems: zod
     .array(
       zod.object({
+        productId: zod
+          .number()
+          .nullish()
+          .describe(
+            "Product Master id (required for new line items, null for legacy)",
+          ),
+        productCode: zod.string().nullish(),
+        productImageUrl: zod.string().nullish(),
+        hsnCode: zod.string().nullish(),
+        unit: zod.string().nullish(),
         description: zod.string(),
         qty: zod.number(),
         unitPrice: zod.number(),
@@ -426,6 +448,7 @@ export const CreateProposalBody = zod.object({
     )
     .optional(),
   discountPercent: zod.number().optional(),
+  packingChargesPercent: zod.number().optional(),
   gstRate: zod.number().optional(),
   validUntil: zod.string().optional(),
   notes: zod.string().optional(),
@@ -458,6 +481,16 @@ export const MarkProposalWonResponse = zod.object({
     salespersonName: zod.string().nullish(),
     lineItems: zod.array(
       zod.object({
+        productId: zod
+          .number()
+          .nullish()
+          .describe(
+            "Product Master id (required for new line items, null for legacy)",
+          ),
+        productCode: zod.string().nullish(),
+        productImageUrl: zod.string().nullish(),
+        hsnCode: zod.string().nullish(),
+        unit: zod.string().nullish(),
         description: zod.string(),
         qty: zod.number(),
         unitPrice: zod.number(),
@@ -465,9 +498,11 @@ export const MarkProposalWonResponse = zod.object({
       }),
     ),
     discountPercent: zod.number(),
+    packingChargesPercent: zod.number(),
     gstRate: zod.number(),
     subtotal: zod.number(),
     discountAmount: zod.number(),
+    packingChargesAmount: zod.number(),
     gstAmount: zod.number(),
     total: zod.number(),
     status: zod.enum(["draft", "sent", "won", "onHold", "lost"]),
@@ -505,6 +540,16 @@ export const GetProposalResponse = zod.object({
   salespersonName: zod.string().nullish(),
   lineItems: zod.array(
     zod.object({
+      productId: zod
+        .number()
+        .nullish()
+        .describe(
+          "Product Master id (required for new line items, null for legacy)",
+        ),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -512,9 +557,11 @@ export const GetProposalResponse = zod.object({
     }),
   ),
   discountPercent: zod.number(),
+  packingChargesPercent: zod.number(),
   gstRate: zod.number(),
   subtotal: zod.number(),
   discountAmount: zod.number(),
+  packingChargesAmount: zod.number(),
   gstAmount: zod.number(),
   total: zod.number(),
   status: zod.enum(["draft", "sent", "won", "onHold", "lost"]),
@@ -537,6 +584,16 @@ export const UpdateProposalBody = zod.object({
   lineItems: zod
     .array(
       zod.object({
+        productId: zod
+          .number()
+          .nullish()
+          .describe(
+            "Product Master id (required for new line items, null for legacy)",
+          ),
+        productCode: zod.string().nullish(),
+        productImageUrl: zod.string().nullish(),
+        hsnCode: zod.string().nullish(),
+        unit: zod.string().nullish(),
         description: zod.string(),
         qty: zod.number(),
         unitPrice: zod.number(),
@@ -545,6 +602,7 @@ export const UpdateProposalBody = zod.object({
     )
     .optional(),
   discountPercent: zod.number().optional(),
+  packingChargesPercent: zod.number().optional(),
   gstRate: zod.number().optional(),
   validUntil: zod.string().optional(),
   notes: zod.string().optional(),
@@ -561,6 +619,16 @@ export const UpdateProposalResponse = zod.object({
   salespersonName: zod.string().nullish(),
   lineItems: zod.array(
     zod.object({
+      productId: zod
+        .number()
+        .nullish()
+        .describe(
+          "Product Master id (required for new line items, null for legacy)",
+        ),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -568,9 +636,11 @@ export const UpdateProposalResponse = zod.object({
     }),
   ),
   discountPercent: zod.number(),
+  packingChargesPercent: zod.number(),
   gstRate: zod.number(),
   subtotal: zod.number(),
   discountAmount: zod.number(),
+  packingChargesAmount: zod.number(),
   gstAmount: zod.number(),
   total: zod.number(),
   status: zod.enum(["draft", "sent", "won", "onHold", "lost"]),
@@ -663,6 +733,11 @@ export const GetWorkOrdersResponseItem = zod.object({
             zod.object({
               id: zod.number(),
               purchaseOrderId: zod.number(),
+              productId: zod.number().nullish(),
+              productCode: zod.string().nullish(),
+              productImageUrl: zod.string().nullish(),
+              hsnCode: zod.string().nullish(),
+              unit: zod.string().nullish(),
               description: zod.string(),
               qty: zod.number(),
               unitPrice: zod.number(),
@@ -733,6 +808,11 @@ export const GetWorkOrdersResponseItem = zod.object({
         zod.object({
           id: zod.number(),
           purchaseOrderId: zod.number(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          hsnCode: zod.string().nullish(),
+          unit: zod.string().nullish(),
           description: zod.string(),
           qty: zod.number(),
           unitPrice: zod.number(),
@@ -837,6 +917,11 @@ export const GetWorkOrderResponse = zod.object({
             zod.object({
               id: zod.number(),
               purchaseOrderId: zod.number(),
+              productId: zod.number().nullish(),
+              productCode: zod.string().nullish(),
+              productImageUrl: zod.string().nullish(),
+              hsnCode: zod.string().nullish(),
+              unit: zod.string().nullish(),
               description: zod.string(),
               qty: zod.number(),
               unitPrice: zod.number(),
@@ -907,6 +992,11 @@ export const GetWorkOrderResponse = zod.object({
         zod.object({
           id: zod.number(),
           purchaseOrderId: zod.number(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          hsnCode: zod.string().nullish(),
+          unit: zod.string().nullish(),
           description: zod.string(),
           qty: zod.number(),
           unitPrice: zod.number(),
@@ -997,6 +1087,11 @@ export const UpdateWorkOrderResponse = zod.object({
             zod.object({
               id: zod.number(),
               purchaseOrderId: zod.number(),
+              productId: zod.number().nullish(),
+              productCode: zod.string().nullish(),
+              productImageUrl: zod.string().nullish(),
+              hsnCode: zod.string().nullish(),
+              unit: zod.string().nullish(),
               description: zod.string(),
               qty: zod.number(),
               unitPrice: zod.number(),
@@ -1067,6 +1162,11 @@ export const UpdateWorkOrderResponse = zod.object({
         zod.object({
           id: zod.number(),
           purchaseOrderId: zod.number(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          hsnCode: zod.string().nullish(),
+          unit: zod.string().nullish(),
           description: zod.string(),
           qty: zod.number(),
           unitPrice: zod.number(),
@@ -1156,6 +1256,11 @@ export const UpdateWorkOrderItemResponse = zod.object({
             zod.object({
               id: zod.number(),
               purchaseOrderId: zod.number(),
+              productId: zod.number().nullish(),
+              productCode: zod.string().nullish(),
+              productImageUrl: zod.string().nullish(),
+              hsnCode: zod.string().nullish(),
+              unit: zod.string().nullish(),
               description: zod.string(),
               qty: zod.number(),
               unitPrice: zod.number(),
@@ -1226,6 +1331,11 @@ export const UpdateWorkOrderItemResponse = zod.object({
         zod.object({
           id: zod.number(),
           purchaseOrderId: zod.number(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          hsnCode: zod.string().nullish(),
+          unit: zod.string().nullish(),
           description: zod.string(),
           qty: zod.number(),
           unitPrice: zod.number(),
@@ -1333,6 +1443,11 @@ export const UpsertDeliveryResponse = zod.object({
             zod.object({
               id: zod.number(),
               purchaseOrderId: zod.number(),
+              productId: zod.number().nullish(),
+              productCode: zod.string().nullish(),
+              productImageUrl: zod.string().nullish(),
+              hsnCode: zod.string().nullish(),
+              unit: zod.string().nullish(),
               description: zod.string(),
               qty: zod.number(),
               unitPrice: zod.number(),
@@ -1403,6 +1518,11 @@ export const UpsertDeliveryResponse = zod.object({
         zod.object({
           id: zod.number(),
           purchaseOrderId: zod.number(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          hsnCode: zod.string().nullish(),
+          unit: zod.string().nullish(),
           description: zod.string(),
           qty: zod.number(),
           unitPrice: zod.number(),
@@ -1486,6 +1606,11 @@ export const GenerateInvoiceResponse = zod.object({
               zod.object({
                 id: zod.number(),
                 purchaseOrderId: zod.number(),
+                productId: zod.number().nullish(),
+                productCode: zod.string().nullish(),
+                productImageUrl: zod.string().nullish(),
+                hsnCode: zod.string().nullish(),
+                unit: zod.string().nullish(),
                 description: zod.string(),
                 qty: zod.number(),
                 unitPrice: zod.number(),
@@ -1556,6 +1681,11 @@ export const GenerateInvoiceResponse = zod.object({
           zod.object({
             id: zod.number(),
             purchaseOrderId: zod.number(),
+            productId: zod.number().nullish(),
+            productCode: zod.string().nullish(),
+            productImageUrl: zod.string().nullish(),
+            hsnCode: zod.string().nullish(),
+            unit: zod.string().nullish(),
             description: zod.string(),
             qty: zod.number(),
             unitPrice: zod.number(),
@@ -1641,6 +1771,11 @@ export const MarkFinishedGoodsResponse = zod.object({
             zod.object({
               id: zod.number(),
               purchaseOrderId: zod.number(),
+              productId: zod.number().nullish(),
+              productCode: zod.string().nullish(),
+              productImageUrl: zod.string().nullish(),
+              hsnCode: zod.string().nullish(),
+              unit: zod.string().nullish(),
               description: zod.string(),
               qty: zod.number(),
               unitPrice: zod.number(),
@@ -1711,6 +1846,11 @@ export const MarkFinishedGoodsResponse = zod.object({
         zod.object({
           id: zod.number(),
           purchaseOrderId: zod.number(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          hsnCode: zod.string().nullish(),
+          unit: zod.string().nullish(),
           description: zod.string(),
           qty: zod.number(),
           unitPrice: zod.number(),
@@ -1760,6 +1900,11 @@ export const GetPurchaseOrdersResponseItem = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -1788,6 +1933,16 @@ export const CreatePurchaseOrderBody = zod.object({
   lineItems: zod
     .array(
       zod.object({
+        productId: zod
+          .number()
+          .optional()
+          .describe(
+            "ID of inventory_items master record (required for new POs)",
+          ),
+        productCode: zod.string().optional(),
+        productImageUrl: zod.string().nullish(),
+        hsnCode: zod.string().nullish(),
+        unit: zod.string().optional(),
         description: zod.string(),
         qty: zod.number().optional(),
         unitPrice: zod.number().optional(),
@@ -1829,6 +1984,11 @@ export const GetPendingMyApprovalResponseItem = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -1878,6 +2038,11 @@ export const GetPurchaseOrderResponse = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -1932,6 +2097,11 @@ export const UpdatePurchaseOrderResponse = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -1978,6 +2148,11 @@ export const ApprovePurchaseOrderResponse = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -2028,6 +2203,11 @@ export const RejectPurchaseOrderResponse = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -2074,6 +2254,11 @@ export const ReceivePurchaseOrderResponse = zod.object({
     zod.object({
       id: zod.number(),
       purchaseOrderId: zod.number(),
+      productId: zod.number().nullish(),
+      productCode: zod.string().nullish(),
+      productImageUrl: zod.string().nullish(),
+      hsnCode: zod.string().nullish(),
+      unit: zod.string().nullish(),
       description: zod.string(),
       qty: zod.number(),
       unitPrice: zod.number(),
@@ -2095,7 +2280,7 @@ export const GetInventoryItemsQueryParams = zod.object({
 
 export const GetInventoryItemsResponseItem = zod.object({
   id: zod.number(),
-  itemCode: zod.string(),
+  itemCode: zod.string().nullish(),
   name: zod.string(),
   category: zod.enum(["rawMaterial", "wip", "finishedGoods"]),
   unit: zod.string(),
@@ -2103,6 +2288,18 @@ export const GetInventoryItemsResponseItem = zod.object({
   gstRate: zod.number(),
   reorderLevel: zod.number(),
   description: zod.string().nullish(),
+  longDescription: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  defaultSalePrice: zod.number(),
+  defaultPurchasePrice: zod.number(),
+  bomTemplateId: zod.number().nullish(),
+  lengthM: zod.number(),
+  widthM: zod.number(),
+  heightM: zod.number(),
+  unitCbm: zod.number(),
+  grossWeightKg: zod.number(),
+  netWeightKg: zod.number(),
+  dutyPercent: zod.number(),
   isActive: zod.boolean(),
   stockBalance: zod.number(),
   isLowStock: zod.boolean(),
@@ -2117,7 +2314,7 @@ export const GetInventoryItemsResponse = zod.array(
  * @summary Create an inventory item
  */
 export const CreateInventoryItemBody = zod.object({
-  itemCode: zod.string(),
+  itemCode: zod.string().optional(),
   name: zod.string(),
   category: zod.enum(["rawMaterial", "wip", "finishedGoods"]).optional(),
   unit: zod.string().optional(),
@@ -2125,6 +2322,18 @@ export const CreateInventoryItemBody = zod.object({
   gstRate: zod.number().optional(),
   reorderLevel: zod.number().optional(),
   description: zod.string().optional(),
+  longDescription: zod.string().optional(),
+  imageUrl: zod.string().optional(),
+  defaultSalePrice: zod.number().optional(),
+  defaultPurchasePrice: zod.number().optional(),
+  bomTemplateId: zod.number().nullish(),
+  lengthM: zod.number().optional(),
+  widthM: zod.number().optional(),
+  heightM: zod.number().optional(),
+  unitCbm: zod.number().optional(),
+  grossWeightKg: zod.number().optional(),
+  netWeightKg: zod.number().optional(),
+  dutyPercent: zod.number().optional(),
 });
 
 /**
@@ -2136,7 +2345,7 @@ export const GetInventoryItemParams = zod.object({
 
 export const GetInventoryItemResponse = zod.object({
   id: zod.number(),
-  itemCode: zod.string(),
+  itemCode: zod.string().nullish(),
   name: zod.string(),
   category: zod.enum(["rawMaterial", "wip", "finishedGoods"]),
   unit: zod.string(),
@@ -2144,6 +2353,18 @@ export const GetInventoryItemResponse = zod.object({
   gstRate: zod.number(),
   reorderLevel: zod.number(),
   description: zod.string().nullish(),
+  longDescription: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  defaultSalePrice: zod.number(),
+  defaultPurchasePrice: zod.number(),
+  bomTemplateId: zod.number().nullish(),
+  lengthM: zod.number(),
+  widthM: zod.number(),
+  heightM: zod.number(),
+  unitCbm: zod.number(),
+  grossWeightKg: zod.number(),
+  netWeightKg: zod.number(),
+  dutyPercent: zod.number(),
   isActive: zod.boolean(),
   stockBalance: zod.number(),
   isLowStock: zod.boolean(),
@@ -2167,12 +2388,24 @@ export const UpdateInventoryItemBody = zod.object({
   gstRate: zod.number().optional(),
   reorderLevel: zod.number().optional(),
   description: zod.string().optional(),
+  longDescription: zod.string().optional(),
+  imageUrl: zod.string().nullish(),
+  defaultSalePrice: zod.number().optional(),
+  defaultPurchasePrice: zod.number().optional(),
+  bomTemplateId: zod.number().nullish(),
+  lengthM: zod.number().optional(),
+  widthM: zod.number().optional(),
+  heightM: zod.number().optional(),
+  unitCbm: zod.number().optional(),
+  grossWeightKg: zod.number().optional(),
+  netWeightKg: zod.number().optional(),
+  dutyPercent: zod.number().optional(),
   isActive: zod.boolean().optional(),
 });
 
 export const UpdateInventoryItemResponse = zod.object({
   id: zod.number(),
-  itemCode: zod.string(),
+  itemCode: zod.string().nullish(),
   name: zod.string(),
   category: zod.enum(["rawMaterial", "wip", "finishedGoods"]),
   unit: zod.string(),
@@ -2180,6 +2413,18 @@ export const UpdateInventoryItemResponse = zod.object({
   gstRate: zod.number(),
   reorderLevel: zod.number(),
   description: zod.string().nullish(),
+  longDescription: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  defaultSalePrice: zod.number(),
+  defaultPurchasePrice: zod.number(),
+  bomTemplateId: zod.number().nullish(),
+  lengthM: zod.number(),
+  widthM: zod.number(),
+  heightM: zod.number(),
+  unitCbm: zod.number(),
+  grossWeightKg: zod.number(),
+  netWeightKg: zod.number(),
+  dutyPercent: zod.number(),
   isActive: zod.boolean(),
   stockBalance: zod.number(),
   isLowStock: zod.boolean(),
@@ -2197,7 +2442,7 @@ export const GetItemLedgerParams = zod.object({
 export const GetItemLedgerResponse = zod.object({
   item: zod.object({
     id: zod.number(),
-    itemCode: zod.string(),
+    itemCode: zod.string().nullish(),
     name: zod.string(),
     category: zod.enum(["rawMaterial", "wip", "finishedGoods"]),
     unit: zod.string(),
@@ -2205,6 +2450,18 @@ export const GetItemLedgerResponse = zod.object({
     gstRate: zod.number(),
     reorderLevel: zod.number(),
     description: zod.string().nullish(),
+    longDescription: zod.string().nullish(),
+    imageUrl: zod.string().nullish(),
+    defaultSalePrice: zod.number(),
+    defaultPurchasePrice: zod.number(),
+    bomTemplateId: zod.number().nullish(),
+    lengthM: zod.number(),
+    widthM: zod.number(),
+    heightM: zod.number(),
+    unitCbm: zod.number(),
+    grossWeightKg: zod.number(),
+    netWeightKg: zod.number(),
+    dutyPercent: zod.number(),
     isActive: zod.boolean(),
     stockBalance: zod.number(),
     isLowStock: zod.boolean(),
@@ -2233,7 +2490,7 @@ export const GetItemLedgerResponse = zod.object({
  */
 export const GetLowStockItemsResponseItem = zod.object({
   id: zod.number(),
-  itemCode: zod.string(),
+  itemCode: zod.string().nullish(),
   name: zod.string(),
   category: zod.enum(["rawMaterial", "wip", "finishedGoods"]),
   unit: zod.string(),
@@ -2241,6 +2498,18 @@ export const GetLowStockItemsResponseItem = zod.object({
   gstRate: zod.number(),
   reorderLevel: zod.number(),
   description: zod.string().nullish(),
+  longDescription: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  defaultSalePrice: zod.number(),
+  defaultPurchasePrice: zod.number(),
+  bomTemplateId: zod.number().nullish(),
+  lengthM: zod.number(),
+  widthM: zod.number(),
+  heightM: zod.number(),
+  unitCbm: zod.number(),
+  grossWeightKg: zod.number(),
+  netWeightKg: zod.number(),
+  dutyPercent: zod.number(),
   isActive: zod.boolean(),
   stockBalance: zod.number(),
   isLowStock: zod.boolean(),
@@ -3440,4 +3709,69 @@ export const GetDashboardGstItcResponse = zod.object({
     total: zod.number(),
   }),
   netPayable: zod.number(),
+});
+
+/**
+ * @summary Request a presigned URL to upload a file directly to object storage
+ */
+export const RequestUploadUrlBody = zod.object({
+  name: zod.string(),
+  size: zod.number(),
+  contentType: zod.string(),
+});
+
+export const RequestUploadUrlResponse = zod.object({
+  uploadURL: zod.string(),
+  objectPath: zod.string(),
+  metadata: zod.object({
+    name: zod.string(),
+    size: zod.number(),
+    contentType: zod.string(),
+  }),
+});
+
+/**
+ * @summary Get the singleton app settings (proposal print template, branding)
+ */
+export const GetAppSettingsResponse = zod.object({
+  id: zod.number(),
+  companyName: zod.string(),
+  companyAddress: zod.string().nullish(),
+  companyGstin: zod.string().nullish(),
+  companyPhone: zod.string().nullish(),
+  companyEmail: zod.string().nullish(),
+  companyWebsite: zod.string().nullish(),
+  companyLogoUrl: zod.string().nullish(),
+  proposalFooterNotes: zod.string().nullish(),
+  proposalTermsAndConditions: zod.string().nullish(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update app settings (admin/director/cfo only)
+ */
+export const UpdateAppSettingsBody = zod.object({
+  companyName: zod.string().optional(),
+  companyAddress: zod.string().nullish(),
+  companyGstin: zod.string().nullish(),
+  companyPhone: zod.string().nullish(),
+  companyEmail: zod.string().nullish(),
+  companyWebsite: zod.string().nullish(),
+  companyLogoUrl: zod.string().nullish(),
+  proposalFooterNotes: zod.string().nullish(),
+  proposalTermsAndConditions: zod.string().nullish(),
+});
+
+export const UpdateAppSettingsResponse = zod.object({
+  id: zod.number(),
+  companyName: zod.string(),
+  companyAddress: zod.string().nullish(),
+  companyGstin: zod.string().nullish(),
+  companyPhone: zod.string().nullish(),
+  companyEmail: zod.string().nullish(),
+  companyWebsite: zod.string().nullish(),
+  companyLogoUrl: zod.string().nullish(),
+  proposalFooterNotes: zod.string().nullish(),
+  proposalTermsAndConditions: zod.string().nullish(),
+  updatedAt: zod.string(),
 });

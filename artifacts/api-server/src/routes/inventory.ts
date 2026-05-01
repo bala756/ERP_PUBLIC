@@ -27,6 +27,11 @@ const createItemSchema = z.object({
   gstRate: z.number().min(0).max(100).default(18),
   reorderLevel: z.number().min(0).default(0),
   description: z.string().optional(),
+  longDescription: z.string().optional(),
+  imageUrl: z.string().nullable().optional(),
+  defaultSalePrice: z.number().min(0).default(0),
+  defaultPurchasePrice: z.number().min(0).default(0),
+  bomTemplateId: z.number().int().positive().nullable().optional(),
   lengthM: z.number().min(0).default(0),
   widthM: z.number().min(0).default(0),
   heightM: z.number().min(0).default(0),
@@ -115,12 +120,17 @@ function serializeItem(item: typeof inventoryItemsTable.$inferSelect, stockBalan
     id: item.id,
     itemCode: item.itemCode,
     name: item.name,
-    category: item.category,
+    category: item.category as "rawMaterial" | "wip" | "finishedGoods",
     unit: item.unit,
     hsnCode: item.hsnCode ?? null,
     gstRate: parseFloat(item.gstRate),
     reorderLevel: parseFloat(item.reorderLevel),
     description: item.description ?? null,
+    longDescription: item.longDescription ?? null,
+    imageUrl: item.imageUrl ?? null,
+    defaultSalePrice: parseFloat(item.defaultSalePrice),
+    defaultPurchasePrice: parseFloat(item.defaultPurchasePrice),
+    bomTemplateId: item.bomTemplateId ?? null,
     lengthM: parseFloat(item.lengthM),
     widthM: parseFloat(item.widthM),
     heightM: parseFloat(item.heightM),
@@ -238,6 +248,8 @@ inventoryRouter.post("/inventory/items", requireRole(...ITEM_MGMT_ROLES), async 
       ...parsed.data,
       gstRate: parsed.data.gstRate.toString(),
       reorderLevel: parsed.data.reorderLevel.toString(),
+      defaultSalePrice: parsed.data.defaultSalePrice.toString(),
+      defaultPurchasePrice: parsed.data.defaultPurchasePrice.toString(),
       lengthM: parsed.data.lengthM.toString(),
       widthM: parsed.data.widthM.toString(),
       heightM: parsed.data.heightM.toString(),
@@ -279,6 +291,11 @@ inventoryRouter.patch("/inventory/items/:id", requireRole(...ITEM_MGMT_ROLES), a
   if (d.gstRate !== undefined) updateData.gstRate = d.gstRate.toString();
   if (d.reorderLevel !== undefined) updateData.reorderLevel = d.reorderLevel.toString();
   if (d.description !== undefined) updateData.description = d.description;
+  if (d.longDescription !== undefined) updateData.longDescription = d.longDescription;
+  if (d.imageUrl !== undefined) updateData.imageUrl = d.imageUrl;
+  if (d.defaultSalePrice !== undefined) updateData.defaultSalePrice = d.defaultSalePrice.toString();
+  if (d.defaultPurchasePrice !== undefined) updateData.defaultPurchasePrice = d.defaultPurchasePrice.toString();
+  if (d.bomTemplateId !== undefined) updateData.bomTemplateId = d.bomTemplateId;
   if (d.lengthM !== undefined) updateData.lengthM = d.lengthM.toString();
   if (d.widthM !== undefined) updateData.widthM = d.widthM.toString();
   if (d.heightM !== undefined) updateData.heightM = d.heightM.toString();

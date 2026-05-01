@@ -36,8 +36,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ArrowLeft, Briefcase, Package, Factory, CheckCircle, XCircle,
-  PackageCheck, Truck, FileText, AlertTriangle, ChevronRight, Plus,
+  PackageCheck, Truck, FileText, AlertTriangle, ChevronRight, Plus, X,
 } from "lucide-react";
+import { ProductPicker, type PickedProduct } from "@/components/ProductPicker";
+import { objectPathToUrl } from "@/lib/uploadFile";
 
 type WorkflowType = "imported" | "manufacturing";
 
@@ -154,13 +156,25 @@ function WorkflowTypeSelector({
   );
 }
 
+interface POLineItemForm {
+  productId?: number;
+  productCode?: string;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string;
+  description: string;
+  qty: string;
+  unitPrice: string;
+  gstRate: string;
+}
+
 interface POFormState {
   supplierName: string;
   supplierContact: string;
   quotedAmount: string;
   poAmount: string;
   notes: string;
-  lineItems: { description: string; qty: string; unitPrice: string; gstRate: string }[];
+  lineItems: POLineItemForm[];
 }
 
 function defaultPOForm(): POFormState {
@@ -170,7 +184,7 @@ function defaultPOForm(): POFormState {
     quotedAmount: "",
     poAmount: "",
     notes: "",
-    lineItems: [{ description: "", qty: "1", unitPrice: "0", gstRate: "18" }],
+    lineItems: [],
   };
 }
 
@@ -189,6 +203,7 @@ export default function WorkOrderDetail() {
 
   const [createPOForItem, setCreatePOForItem] = useState<number | null>(null);
   const [poForm, setPOForm] = useState<POFormState>(defaultPOForm());
+  const [showPOPicker, setShowPOPicker] = useState(false);
 
   const [subcontractForItem, setSubcontractForItem] = useState<number | null>(null);
   const [subForm, setSubForm] = useState({ vendorName: "", vendorContact: "", cost: "", description: "" });
@@ -268,8 +283,13 @@ export default function WorkOrderDetail() {
         poAmount: parseFloat(poForm.poAmount) || 0,
         notes: poForm.notes || undefined,
         lineItems: poForm.lineItems
-          .filter((li) => li.description.trim())
+          .filter((li) => li.description.trim() && li.productId)
           .map((li) => ({
+            productId: li.productId,
+            productCode: li.productCode,
+            productImageUrl: li.productImageUrl ?? null,
+            hsnCode: li.hsnCode ?? null,
+            unit: li.unit,
             description: li.description,
             qty: parseFloat(li.qty) || 1,
             unitPrice: parseFloat(li.unitPrice) || 0,
@@ -712,19 +732,90 @@ export default function WorkOrderDetail() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Line Items</Label>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setPOForm((p) => ({ ...p, lineItems: [...p.lineItems, { description: "", qty: "1", unitPrice: "0", gstRate: "18" }] }))}>
-                  <Plus className="h-3 w-3 mr-1" />Add
+                <Label>Line Items (from Product Master)</Label>
+                <Button type="button" size="sm" variant="outline" onClick={() => setShowPOPicker(true)}>
+                  <Plus className="h-3 w-3 mr-1" />Add Product
                 </Button>
               </div>
+              {poForm.lineItems.length === 0 && (
+                <div className="text-xs text-muted-foreground border border-dashed rounded p-3 text-center">
+                  No products added. Click "Add Product" to pick from Product Master.
+                </div>
+              )}
               {poForm.lineItems.map((li, i) => (
-                <div key={i} className="grid grid-cols-4 gap-2">
-                  <Input className="col-span-2" placeholder="Description" value={li.description} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], description: e.target.value }; return { ...p, lineItems: ls }; })} />
-                  <Input type="number" placeholder="Qty" value={li.qty} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...p, lineItems: ls }; })} />
-                  <Input type="number" placeholder="Unit ₹" value={li.unitPrice} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], unitPrice: e.target.value }; return { ...p, lineItems: ls }; })} />
+                <div key={i} className="border rounded-md p-2 space-y-2 bg-muted/30">
+                  <div className="flex items-start gap-2">
+                    {li.productImageUrl ? (
+                      <img src={objectPathToUrl(li.productImageUrl)} alt={li.productCode} className="w-12 h-12 rounded object-cover border bg-white shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded border bg-white flex items-center justify-center shrink-0">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-mono text-muted-foreground truncate">
+                          {li.productCode}
+                          {li.hsnCode ? ` · HSN ${li.hsnCode}` : ""}
+                          {li.unit ? ` · ${li.unit}` : ""}
+                        </div>
+                        <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setPOForm((p) => ({ ...p, lineItems: p.lineItems.filter((_, idx) => idx !== i) }))}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        placeholder="Description"
+                        value={li.description}
+                        onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], description: e.target.value }; return { ...p, lineItems: ls }; })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <Label className="text-xs">Qty</Label>
+                      <Input type="number" min="0" step="0.01" value={li.qty} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...p, lineItems: ls }; })} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Unit ₹</Label>
+                      <Input type="number" min="0" step="0.01" value={li.unitPrice} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], unitPrice: e.target.value }; return { ...p, lineItems: ls }; })} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">GST %</Label>
+                      <Input type="number" min="0" max="100" step="0.01" value={li.gstRate} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], gstRate: e.target.value }; return { ...p, lineItems: ls }; })} />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
+
+            <ProductPicker
+              open={showPOPicker}
+              onClose={() => setShowPOPicker(false)}
+              mode="purchase"
+              excludeIds={poForm.lineItems.map((li) => li.productId).filter((id): id is number => typeof id === "number")}
+              onPick={(p: PickedProduct) => {
+                setPOForm((prev) => ({
+                  ...prev,
+                  lineItems: [
+                    ...prev.lineItems,
+                    {
+                      productId: p.productId,
+                      productCode: p.productCode,
+                      productImageUrl: p.productImageUrl,
+                      hsnCode: p.hsnCode,
+                      unit: p.unit,
+                      description: p.description,
+                      qty: "1",
+                      unitPrice: String(p.unitPrice),
+                      gstRate: String(p.gstRate),
+                    },
+                  ],
+                }));
+                setShowPOPicker(false);
+              }}
+            />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreatePOForItem(null)}>Cancel</Button>

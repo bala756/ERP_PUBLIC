@@ -11,6 +11,8 @@ import employeesRouter from "./employees";
 import financeRouter from "./finance";
 import importsRouter from "./imports";
 import leadRoutingRouter from "./leadRouting";
+import storageRouter from "./storage";
+import appSettingsRouter from "./appSettings";
 
 const router: IRouter = Router();
 
@@ -26,5 +28,7 @@ router.use(employeesRouter);
 router.use(financeRouter);
 router.use(importsRouter);
 router.use(leadRoutingRouter);
+router.use(storageRouter);
+router.use(appSettingsRouter);
 
 export default router;

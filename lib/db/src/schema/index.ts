@@ -5,6 +5,7 @@ export * from "./leads";
 export * from "./lead-enhancements";
 export * from "./orders";
 export * from "./inventory";
+export * from "./app-settings";
 export * from "./employees";
 export * from "./finance";
 export * from "./imports";

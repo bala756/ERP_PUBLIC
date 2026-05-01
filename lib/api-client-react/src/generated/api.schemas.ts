@@ -199,6 +199,12 @@ export interface FunnelStat {
 }
 
 export interface ProposalLineItem {
+  /** Product Master id (required for new line items, null for legacy) */
+  productId?: number | null;
+  productCode?: string | null;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string | null;
   description: string;
   qty: number;
   unitPrice: number;
@@ -226,9 +232,11 @@ export interface Proposal {
   salespersonName?: string | null;
   lineItems: ProposalLineItem[];
   discountPercent: number;
+  packingChargesPercent: number;
   gstRate: number;
   subtotal: number;
   discountAmount: number;
+  packingChargesAmount: number;
   gstAmount: number;
   total: number;
   status: ProposalStatus;
@@ -255,6 +263,7 @@ export interface CreateProposalBody {
   salespersonId?: number;
   lineItems?: ProposalLineItem[];
   discountPercent?: number;
+  packingChargesPercent?: number;
   gstRate?: number;
   validUntil?: string;
   notes?: string;
@@ -276,6 +285,7 @@ export interface UpdateProposalBody {
   salespersonId?: number;
   lineItems?: ProposalLineItem[];
   discountPercent?: number;
+  packingChargesPercent?: number;
   gstRate?: number;
   validUntil?: string;
   notes?: string;
@@ -305,6 +315,11 @@ export interface MarkWonResult {
 export interface PoLineItem {
   id: number;
   purchaseOrderId: number;
+  productId?: number | null;
+  productCode?: string | null;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string | null;
   description: string;
   qty: number;
   unitPrice: number;
@@ -534,6 +549,12 @@ export const CreatePurchaseOrderBodyType = {
 } as const;
 
 export type CreatePurchaseOrderBodyLineItemsItem = {
+  /** ID of inventory_items master record (required for new POs) */
+  productId?: number;
+  productCode?: string;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string;
   description: string;
   qty?: number;
   unitPrice?: number;
@@ -571,7 +592,7 @@ export const InventoryItemCategory = {
 
 export interface InventoryItem {
   id: number;
-  itemCode: string;
+  itemCode?: string | null;
   name: string;
   category: InventoryItemCategory;
   unit: string;
@@ -579,6 +600,18 @@ export interface InventoryItem {
   gstRate: number;
   reorderLevel: number;
   description?: string | null;
+  longDescription?: string | null;
+  imageUrl?: string | null;
+  defaultSalePrice: number;
+  defaultPurchasePrice: number;
+  bomTemplateId?: number | null;
+  lengthM: number;
+  widthM: number;
+  heightM: number;
+  unitCbm: number;
+  grossWeightKg: number;
+  netWeightKg: number;
+  dutyPercent: number;
   isActive: boolean;
   stockBalance: number;
   isLowStock: boolean;
@@ -596,7 +629,7 @@ export const CreateInventoryItemBodyCategory = {
 } as const;
 
 export interface CreateInventoryItemBody {
-  itemCode: string;
+  itemCode?: string;
   name: string;
   category?: CreateInventoryItemBodyCategory;
   unit?: string;
@@ -604,6 +637,18 @@ export interface CreateInventoryItemBody {
   gstRate?: number;
   reorderLevel?: number;
   description?: string;
+  longDescription?: string;
+  imageUrl?: string;
+  defaultSalePrice?: number;
+  defaultPurchasePrice?: number;
+  bomTemplateId?: number | null;
+  lengthM?: number;
+  widthM?: number;
+  heightM?: number;
+  unitCbm?: number;
+  grossWeightKg?: number;
+  netWeightKg?: number;
+  dutyPercent?: number;
 }
 
 export type UpdateInventoryItemBodyCategory =
@@ -624,6 +669,18 @@ export interface UpdateInventoryItemBody {
   gstRate?: number;
   reorderLevel?: number;
   description?: string;
+  longDescription?: string;
+  imageUrl?: string | null;
+  defaultSalePrice?: number;
+  defaultPurchasePrice?: number;
+  bomTemplateId?: number | null;
+  lengthM?: number;
+  widthM?: number;
+  heightM?: number;
+  unitCbm?: number;
+  grossWeightKg?: number;
+  netWeightKg?: number;
+  dutyPercent?: number;
   isActive?: boolean;
 }
 
@@ -1444,6 +1501,50 @@ export interface GstItcSummary {
   inputITC: GstItcSummaryInputITC;
   outputGST: GstItcSummaryOutputGST;
   netPayable: number;
+}
+
+export interface RequestUploadUrlBody {
+  name: string;
+  size: number;
+  contentType: string;
+}
+
+export type RequestUploadUrlResponseMetadata = {
+  name: string;
+  size: number;
+  contentType: string;
+};
+
+export interface RequestUploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata: RequestUploadUrlResponseMetadata;
+}
+
+export interface AppSettings {
+  id: number;
+  companyName: string;
+  companyAddress?: string | null;
+  companyGstin?: string | null;
+  companyPhone?: string | null;
+  companyEmail?: string | null;
+  companyWebsite?: string | null;
+  companyLogoUrl?: string | null;
+  proposalFooterNotes?: string | null;
+  proposalTermsAndConditions?: string | null;
+  updatedAt: string;
+}
+
+export interface UpdateAppSettingsBody {
+  companyName?: string;
+  companyAddress?: string | null;
+  companyGstin?: string | null;
+  companyPhone?: string | null;
+  companyEmail?: string | null;
+  companyWebsite?: string | null;
+  companyLogoUrl?: string | null;
+  proposalFooterNotes?: string | null;
+  proposalTermsAndConditions?: string | null;
 }
 
 export type GetUsersParams = {

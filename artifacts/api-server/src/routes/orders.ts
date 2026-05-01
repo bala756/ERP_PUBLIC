@@ -118,6 +118,11 @@ function serializePO(
     lineItems: (po.lineItems ?? []).map((li) => ({
       id: li.id,
       purchaseOrderId: li.purchaseOrderId,
+      productId: li.productId ?? null,
+      productCode: li.productCode ?? null,
+      productImageUrl: li.productImageUrl ?? null,
+      hsnCode: li.hsnCode ?? null,
+      unit: li.unit ?? null,
       description: li.description,
       qty: parseFloat(li.qty),
       unitPrice: parseFloat(li.unitPrice),
@@ -206,13 +211,18 @@ const createPOSchema = z.object({
   lineItems: z
     .array(
       z.object({
+        productId: z.number().int().positive(),
+        productCode: z.string().optional(),
+        productImageUrl: z.string().nullable().optional(),
+        hsnCode: z.string().nullable().optional(),
+        unit: z.string().optional(),
         description: z.string().min(1),
         qty: z.number().positive().default(1),
         unitPrice: z.number().min(0).default(0),
         gstRate: z.number().min(0).max(100).default(18),
       }),
     )
-    .default([]),
+    .min(1, "At least one product line item is required"),
 });
 
 const updatePOSchema = createPOSchema.omit({ workOrderId: true }).partial();
@@ -529,6 +539,11 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
     await db.insert(poLineItemsTable).values(
       lineItems.map((li) => ({
         purchaseOrderId: po.id,
+        productId: li.productId ?? null,
+        productCode: li.productCode ?? null,
+        productImageUrl: li.productImageUrl ?? null,
+        hsnCode: li.hsnCode ?? null,
+        unit: li.unit ?? null,
         description: li.description,
         qty: li.qty.toString(),
         unitPrice: li.unitPrice.toString(),

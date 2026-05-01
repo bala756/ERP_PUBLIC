@@ -18,6 +18,7 @@ import type {
 
 import type {
   ApAgeingReport,
+  AppSettings,
   Approval,
   ArAgeingReport,
   AttendanceRecord,
@@ -88,12 +89,15 @@ import type {
   RecordPaymentBody,
   RejectLeaveRequestBody,
   RejectPurchaseOrderBody,
+  RequestUploadUrlBody,
+  RequestUploadUrlResponse,
   ServiceOrder,
   SetLeaveBalanceBody,
   StockLedger,
   StockTransaction,
   SuccessResponse,
   SupplierBill,
+  UpdateAppSettingsBody,
   UpdateBomBody,
   UpdateEmployeeBody,
   UpdateGstInvoiceBody,
@@ -8293,3 +8297,250 @@ export function useGetDashboardGstItc<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Request a presigned URL to upload a file directly to object storage
+ */
+export const getRequestUploadUrlUrl = () => {
+  return `/api/storage/uploads/request-url`;
+};
+
+export const requestUploadUrl = async (
+  requestUploadUrlBody: RequestUploadUrlBody,
+  options?: RequestInit,
+): Promise<RequestUploadUrlResponse> => {
+  return customFetch<RequestUploadUrlResponse>(getRequestUploadUrlUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(requestUploadUrlBody),
+  });
+};
+
+export const getRequestUploadUrlMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestUploadUrl>>,
+    TError,
+    { data: BodyType<RequestUploadUrlBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestUploadUrl>>,
+  TError,
+  { data: BodyType<RequestUploadUrlBody> },
+  TContext
+> => {
+  const mutationKey = ["requestUploadUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestUploadUrl>>,
+    { data: BodyType<RequestUploadUrlBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestUploadUrl(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestUploadUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestUploadUrl>>
+>;
+export type RequestUploadUrlMutationBody = BodyType<RequestUploadUrlBody>;
+export type RequestUploadUrlMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Request a presigned URL to upload a file directly to object storage
+ */
+export const useRequestUploadUrl = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestUploadUrl>>,
+    TError,
+    { data: BodyType<RequestUploadUrlBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestUploadUrl>>,
+  TError,
+  { data: BodyType<RequestUploadUrlBody> },
+  TContext
+> => {
+  return useMutation(getRequestUploadUrlMutationOptions(options));
+};
+
+/**
+ * @summary Get the singleton app settings (proposal print template, branding)
+ */
+export const getGetAppSettingsUrl = () => {
+  return `/api/app-settings`;
+};
+
+export const getAppSettings = async (
+  options?: RequestInit,
+): Promise<AppSettings> => {
+  return customFetch<AppSettings>(getGetAppSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAppSettingsQueryKey = () => {
+  return [`/api/app-settings`] as const;
+};
+
+export const getGetAppSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAppSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAppSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAppSettingsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAppSettings>>> = ({
+    signal,
+  }) => getAppSettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAppSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAppSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAppSettings>>
+>;
+export type GetAppSettingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the singleton app settings (proposal print template, branding)
+ */
+
+export function useGetAppSettings<
+  TData = Awaited<ReturnType<typeof getAppSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAppSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAppSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update app settings (admin/director/cfo only)
+ */
+export const getUpdateAppSettingsUrl = () => {
+  return `/api/app-settings`;
+};
+
+export const updateAppSettings = async (
+  updateAppSettingsBody: UpdateAppSettingsBody,
+  options?: RequestInit,
+): Promise<AppSettings> => {
+  return customFetch<AppSettings>(getUpdateAppSettingsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateAppSettingsBody),
+  });
+};
+
+export const getUpdateAppSettingsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppSettings>>,
+    TError,
+    { data: BodyType<UpdateAppSettingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAppSettings>>,
+  TError,
+  { data: BodyType<UpdateAppSettingsBody> },
+  TContext
+> => {
+  const mutationKey = ["updateAppSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAppSettings>>,
+    { data: BodyType<UpdateAppSettingsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAppSettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAppSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAppSettings>>
+>;
+export type UpdateAppSettingsMutationBody = BodyType<UpdateAppSettingsBody>;
+export type UpdateAppSettingsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update app settings (admin/director/cfo only)
+ */
+export const useUpdateAppSettings = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppSettings>>,
+    TError,
+    { data: BodyType<UpdateAppSettingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAppSettings>>,
+  TError,
+  { data: BodyType<UpdateAppSettingsBody> },
+  TContext
+> => {
+  return useMutation(getUpdateAppSettingsMutationOptions(options));
+};

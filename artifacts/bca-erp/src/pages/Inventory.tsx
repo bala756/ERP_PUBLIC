@@ -36,6 +36,10 @@ import {
   AlertTriangle, BookOpen, LayoutDashboard, Search,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ImageUpload } from "@/components/ImageUpload";
+import { useGetBomList } from "@workspace/api-client-react";
+import { Textarea } from "@/components/ui/textarea";
+import { objectPathToUrl } from "@/lib/uploadFile";
 
 const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"];
 const ITEM_MGMT_ROLES = ["manager", "director", "admin", "cfo"];
@@ -64,7 +68,9 @@ function ItemFormDialog({
   initial?: Partial<InventoryItem>;
   isSaving: boolean;
 }) {
-  const [form, setForm] = useState<{
+  const { data: bomList = [] } = useGetBomList();
+
+  type FormState = {
     itemCode: string;
     name: string;
     category: "rawMaterial" | "wip" | "finishedGoods";
@@ -73,36 +79,42 @@ function ItemFormDialog({
     gstRate: string;
     reorderLevel: string;
     description: string;
-  }>({
+    longDescription: string;
+    imageUrl: string | null;
+    defaultSalePrice: string;
+    defaultPurchasePrice: string;
+    bomTemplateId: string;
+  };
+
+  const buildInitial = (): FormState => ({
     itemCode: initial?.itemCode ?? "",
     name: initial?.name ?? "",
-    category: (initial?.category as "rawMaterial" | "wip" | "finishedGoods") ?? "rawMaterial",
+    category:
+      (initial?.category as "rawMaterial" | "wip" | "finishedGoods") ??
+      "rawMaterial",
     unit: initial?.unit ?? "pcs",
     hsnCode: initial?.hsnCode ?? "",
     gstRate: String(initial?.gstRate ?? 18),
     reorderLevel: String(initial?.reorderLevel ?? 0),
     description: initial?.description ?? "",
+    longDescription: initial?.longDescription ?? "",
+    imageUrl: initial?.imageUrl ?? null,
+    defaultSalePrice: String(initial?.defaultSalePrice ?? 0),
+    defaultPurchasePrice: String(initial?.defaultPurchasePrice ?? 0),
+    bomTemplateId: initial?.bomTemplateId ? String(initial.bomTemplateId) : "",
   });
 
+  const [form, setForm] = useState<FormState>(buildInitial);
+
   React.useEffect(() => {
-    if (open) {
-      setForm({
-        itemCode: initial?.itemCode ?? "",
-        name: initial?.name ?? "",
-        category: (initial?.category as "rawMaterial" | "wip" | "finishedGoods") ?? "rawMaterial",
-        unit: initial?.unit ?? "pcs",
-        hsnCode: initial?.hsnCode ?? "",
-        gstRate: String(initial?.gstRate ?? 18),
-        reorderLevel: String(initial?.reorderLevel ?? 0),
-        description: initial?.description ?? "",
-      });
-    }
-  }, [open]);
+    if (open) setForm(buildInitial());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial?.id]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload: CreateInventoryItemBody = {
-      itemCode: form.itemCode,
+    const payload: UpdateInventoryItemBody = {
+      itemCode: form.itemCode || undefined,
       name: form.name,
       category: form.category,
       unit: form.unit,
@@ -110,65 +122,204 @@ function ItemFormDialog({
       gstRate: parseFloat(form.gstRate) || 0,
       reorderLevel: parseFloat(form.reorderLevel) || 0,
       description: form.description || undefined,
+      longDescription: form.longDescription || undefined,
+      imageUrl: form.imageUrl ?? null,
+      defaultSalePrice: parseFloat(form.defaultSalePrice) || 0,
+      defaultPurchasePrice: parseFloat(form.defaultPurchasePrice) || 0,
+      bomTemplateId: form.bomTemplateId
+        ? parseInt(form.bomTemplateId, 10)
+        : null,
     };
     onSave(payload);
   };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initial?.id ? "Edit Item" : "New Inventory Item"}</DialogTitle>
+          <DialogTitle>
+            {initial?.id ? "Edit Product" : "New Product"}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Item Code *</Label>
-              <Input value={form.itemCode} onChange={(e) => setForm({ ...form, itemCode: e.target.value })} required />
-            </div>
-            <div className="space-y-1">
-              <Label>Name *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          <div className="flex gap-4 items-start">
+            <ImageUpload
+              value={form.imageUrl}
+              onChange={(v) => setForm({ ...form, imageUrl: v })}
+              label="Upload Image"
+            />
+            <div className="flex-1 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Product Code</Label>
+                  <Input
+                    value={form.itemCode}
+                    onChange={(e) => setForm({ ...form, itemCode: e.target.value })}
+                    placeholder="auto if empty"
+                    data-testid="input-product-code"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Name *</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    required
+                    data-testid="input-product-name"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Category</Label>
+                  <Select
+                    value={form.category}
+                    onValueChange={(v) =>
+                      setForm({ ...form, category: v as FormState["category"] })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {CATEGORY_LABELS[c]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Unit</Label>
+                  <Input
+                    value={form.unit}
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                    placeholder="pcs, kg, m..."
+                  />
+                </div>
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Category</Label>
-              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as "rawMaterial" | "wip" | "finishedGoods" })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Unit</Label>
-              <Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs, kg, m..." />
-            </div>
-          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label>HSN Code</Label>
-              <Input value={form.hsnCode} onChange={(e) => setForm({ ...form, hsnCode: e.target.value })} />
+              <Input
+                value={form.hsnCode}
+                onChange={(e) => setForm({ ...form, hsnCode: e.target.value })}
+                data-testid="input-product-hsn"
+              />
             </div>
             <div className="space-y-1">
               <Label>GST Rate (%)</Label>
-              <Input type="number" value={form.gstRate} onChange={(e) => setForm({ ...form, gstRate: e.target.value })} min={0} max={100} step={0.5} />
+              <Input
+                type="number"
+                value={form.gstRate}
+                onChange={(e) => setForm({ ...form, gstRate: e.target.value })}
+                min={0}
+                max={100}
+                step={0.5}
+                data-testid="input-product-gst"
+              />
             </div>
             <div className="space-y-1">
               <Label>Reorder Level</Label>
-              <Input type="number" value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} min={0} step={0.01} />
+              <Input
+                type="number"
+                value={form.reorderLevel}
+                onChange={(e) =>
+                  setForm({ ...form, reorderLevel: e.target.value })
+                }
+                min={0}
+                step={0.01}
+              />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Description</Label>
-            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Default Sale Price (₹)</Label>
+              <Input
+                type="number"
+                value={form.defaultSalePrice}
+                onChange={(e) =>
+                  setForm({ ...form, defaultSalePrice: e.target.value })
+                }
+                min={0}
+                step={0.01}
+                data-testid="input-default-sale-price"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Default Purchase Price (₹)</Label>
+              <Input
+                type="number"
+                value={form.defaultPurchasePrice}
+                onChange={(e) =>
+                  setForm({ ...form, defaultPurchasePrice: e.target.value })
+                }
+                min={0}
+                step={0.01}
+              />
+            </div>
           </div>
+
+          <div className="space-y-1">
+            <Label>BOM Template (optional)</Label>
+            <Select
+              value={form.bomTemplateId || "none"}
+              onValueChange={(v) =>
+                setForm({ ...form, bomTemplateId: v === "none" ? "" : v })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {bomList.map((b) => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Link to a BOM so production knows components for this product.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Short Description</Label>
+            <Input
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              placeholder="Used as default proposal/PO line text"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Long Description (printed on proposals)</Label>
+            <Textarea
+              rows={4}
+              value={form.longDescription}
+              onChange={(e) =>
+                setForm({ ...form, longDescription: e.target.value })
+              }
+              placeholder="Full product write-up, specifications, etc."
+            />
+          </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? "Saving…" : "Save"}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSaving} data-testid="button-product-save">
+              {isSaving ? "Saving…" : "Save"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -472,12 +623,13 @@ export default function Inventory() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-14">Image</TableHead>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Unit</TableHead>
               <TableHead className="text-right">Stock</TableHead>
-              <TableHead className="text-right">Reorder Lvl</TableHead>
+              <TableHead className="text-right">Sale ₹</TableHead>
               <TableHead className="text-right">GST %</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -486,20 +638,33 @@ export default function Inventory() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 9 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
                   {showLowStock ? "No low-stock items — great!" : "No items found. Add your first inventory item."}
                 </TableCell>
               </TableRow>
             ) : (
               items.map((item) => (
                 <TableRow key={item.id} className={item.isLowStock ? "bg-orange-50" : ""}>
+                  <TableCell>
+                    <div className="h-9 w-9 rounded bg-muted overflow-hidden flex items-center justify-center">
+                      {item.imageUrl ? (
+                        <img
+                          src={objectPathToUrl(item.imageUrl)}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-mono text-sm">{item.itemCode}</TableCell>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -518,7 +683,9 @@ export default function Inventory() {
                   <TableCell className={`text-right font-bold ${item.isLowStock ? "text-orange-600" : ""}`}>
                     {item.stockBalance}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">{item.reorderLevel}</TableCell>
+                  <TableCell className="text-right">
+                    ₹{Number(item.defaultSalePrice ?? 0).toLocaleString("en-IN")}
+                  </TableCell>
                   <TableCell className="text-right">{item.gstRate}%</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">

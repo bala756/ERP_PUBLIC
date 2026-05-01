@@ -252,3 +252,26 @@ All seeded users use password: `bca@2024`
 - Max age: 30 days
 - HttpOnly, SameSite=Lax
 - Session store: PostgreSQL (`sessions` table)
+
+## Task #2 — Product Master + Picker Workflow (Apr 2026)
+
+### Schema additions
+- `inventory_items`: `default_sale_price`, `default_purchase_price`, `long_description`, `image_url`, `bom_template_id` (nullable FK).
+- `proposals.packing_charges_percent` (numeric).
+- `app_settings` singleton (id=1) — proposal print template (logo, GSTIN, address, T&C, footer).
+- `po_line_items`: `product_id`, `product_code`, `product_image_url`, `hsn_code`, `unit` (snapshot fields from picker).
+
+### API
+- `/api/storage/uploads/request-url` — `requireAuth` (any logged-in user can request signed upload URL).
+- `/api/app-settings` — GET (any auth), PUT admin/director/cfo only.
+- `/api/inventory-items` CRUD: ITEM_MGMT_ROLES (manager/director/admin/cfo) writes; new fields supported.
+- `/api/proposals` create/update: `lineItems.min(1)` enforced, `productId` required per row; default salesperson from `lead.assigned_to_id`; `calcTotals` formula: `taxable = subtotal − discount + packing`, `gst = taxable × rate`, `total = taxable + gst`.
+- `/api/purchase-orders` create: `lineItems.min(1)` enforced, `productId` required per row; PO line items persist & return product snapshot fields.
+
+### Frontend
+- `<ProductPicker mode="sale|purchase" />` component returns `PickedProduct` with image/HSN/unit/price/gstRate.
+- Inventory page: image upload + long description + sale/purchase price + BOM dropdown.
+- Proposals page: ProductPicker-driven line items, salesperson auto-fill from lead, packing charges % input, totals preview includes packing.
+- ProposalPrint page: pulls company branding/logo/T&C from `app_settings`; shows product image + HSN columns + packing line.
+- Settings page: admin-only "Proposal Print Template" card with logo upload + T&C textarea + company fields.
+- WorkOrderDetail PO modal: ProductPicker (purchase mode) — no free-text rows.
