@@ -6,6 +6,7 @@ import {
   useGetPurchaseRequest,
   useApprovePurchaseRequest,
   useRejectPurchaseRequest,
+  useUpdatePurchaseRequest,
   PurchaseRequestItemBranch,
   type PurchaseRequest,
   type PurchaseRequestItem,
@@ -181,8 +182,57 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
   const { toast } = useToast();
   const qc = useQueryClient();
   const [vendors, setVendors] = useState<Record<number, string>>({});
+  const [edits, setEdits] = useState<
+    Record<number, { qty?: string; cost?: string }>
+  >({});
   const approve = useApprovePurchaseRequest();
   const reject = useRejectPurchaseRequest();
+  const update = useUpdatePurchaseRequest();
+
+  const dirtyItems = pr
+    ? pr.items
+        .filter((it: PurchaseRequestItem) => {
+          const e = edits[it.id];
+          if (!e) return false;
+          const q = e.qty !== undefined ? parseFloat(e.qty) : it.shortfallQty;
+          const c =
+            e.cost !== undefined ? parseFloat(e.cost) : it.estimatedUnitCost;
+          return (
+            (!isNaN(q) && q !== it.shortfallQty) ||
+            (!isNaN(c) && c !== it.estimatedUnitCost)
+          );
+        })
+        .map((it: PurchaseRequestItem) => {
+          const e = edits[it.id];
+          return {
+            id: it.id,
+            shortfallQty:
+              e?.qty !== undefined ? parseFloat(e.qty) : it.shortfallQty,
+            estimatedUnitCost:
+              e?.cost !== undefined
+                ? parseFloat(e.cost)
+                : it.estimatedUnitCost,
+          };
+        })
+    : [];
+
+  const onSaveEdits = async () => {
+    if (dirtyItems.length === 0) return;
+    await update.mutateAsync(
+      { id, data: { items: dirtyItems } },
+      {
+        onSuccess: () => {
+          toast({ title: "PR updated", description: "Quantities/costs saved." });
+          setEdits({});
+          qc.invalidateQueries();
+        },
+        onError: (e: unknown) => {
+          const msg = e instanceof Error ? e.message : "Update failed";
+          toast({ title: "Failed to save", description: msg, variant: "destructive" });
+        },
+      },
+    );
+  };
 
   const onApprove = async () => {
     if (!pr) return;
@@ -251,8 +301,8 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                   <TableHead>Item</TableHead>
                   <TableHead className="text-right">Required</TableHead>
                   <TableHead className="text-right">On Hand</TableHead>
-                  <TableHead className="text-right">Shortfall</TableHead>
-                  <TableHead className="text-right">Est. Cost</TableHead>
+                  <TableHead className="text-right">Shortfall (editable)</TableHead>
+                  <TableHead className="text-right">Est. Unit Cost (editable)</TableHead>
                   <TableHead>Vendor (for PO)</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -272,10 +322,48 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                     </TableCell>
                     <TableCell className="text-right">{it.requiredQty}</TableCell>
                     <TableCell className="text-right">{it.onHandQty}</TableCell>
-                    <TableCell className={`text-right font-semibold ${it.shortfallQty > 0 ? "text-orange-600" : "text-green-700"}`}>
-                      {it.shortfallQty}
+                    <TableCell className="text-right">
+                      {pr.status === "proposed" ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="h-8 w-24 text-right ml-auto"
+                          value={edits[it.id]?.qty ?? String(it.shortfallQty)}
+                          onChange={(e) =>
+                            setEdits({
+                              ...edits,
+                              [it.id]: { ...edits[it.id], qty: e.target.value },
+                            })
+                          }
+                          data-testid={`input-qty-${it.id}`}
+                        />
+                      ) : (
+                        <span className={`font-semibold ${it.shortfallQty > 0 ? "text-orange-600" : "text-green-700"}`}>
+                          {it.shortfallQty}
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-right">₹{it.estimatedUnitCost.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">
+                      {pr.status === "proposed" ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="h-8 w-28 text-right ml-auto"
+                          value={edits[it.id]?.cost ?? String(it.estimatedUnitCost)}
+                          onChange={(e) =>
+                            setEdits({
+                              ...edits,
+                              [it.id]: { ...edits[it.id], cost: e.target.value },
+                            })
+                          }
+                          data-testid={`input-cost-${it.id}`}
+                        />
+                      ) : (
+                        <>₹{it.estimatedUnitCost.toLocaleString("en-IN")}</>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {pr.status === "proposed" && it.branch !== PurchaseRequestItemBranch.manufactured && it.shortfallQty > 0 ? (
                         <Input
@@ -307,6 +395,14 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
             <>
               <Button
                 variant="outline"
+                onClick={onSaveEdits}
+                disabled={update.isPending || dirtyItems.length === 0}
+                data-testid="button-save-pr-edits"
+              >
+                Save Edits{dirtyItems.length > 0 ? ` (${dirtyItems.length})` : ""}
+              </Button>
+              <Button
+                variant="outline"
                 onClick={onReject}
                 disabled={reject.isPending}
                 data-testid="button-reject-pr"
@@ -316,8 +412,9 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
               </Button>
               <Button
                 onClick={onApprove}
-                disabled={approve.isPending}
+                disabled={approve.isPending || dirtyItems.length > 0}
                 data-testid="button-approve-pr"
+                title={dirtyItems.length > 0 ? "Save edits before approving" : ""}
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
                 Approve & Create POs / Import Jobs

@@ -978,9 +978,40 @@ ordersRouter.post(
           : eq(workOrderItemsTable.workOrderId, updated.workOrderId),
       );
 
-    logger.info({ poId: id }, `Goods received for PO — trigger stock IN: ${nextStep}`);
+    // Post Stores In: write a cost-stamped stock_movements row for each PO
+    // line item that has a productId. This is the canonical receipt event
+    // that downstream Stores Out / invoicing / P&L cost from.
+    const liRows = await db
+      .select()
+      .from(poLineItemsTable)
+      .where(eq(poLineItemsTable.purchaseOrderId, id));
+    const movementInserts = liRows
+      .filter((li) => li.productId !== null)
+      .map((li) => {
+        const qty = parseFloat(li.qty);
+        const unitCost = parseFloat(li.unitPrice);
+        return {
+          itemId: li.productId as number,
+          movementType: "in" as const,
+          sourceType: "purchaseOrder" as const,
+          sourceId: id,
+          workOrderId: updated.workOrderId ?? null,
+          qty: qty.toString(),
+          unitCost: unitCost.toString(),
+          totalCost: (qty * unitCost).toFixed(2),
+          createdById: req.session.userId ?? null,
+          notes: `PO receipt ${po.poNumber}`,
+        };
+      });
+    if (movementInserts.length > 0) {
+      await db.insert(stockMovementsTable).values(movementInserts);
+    }
 
-    const liRows = await db.select().from(poLineItemsTable).where(eq(poLineItemsTable.purchaseOrderId, id));
+    logger.info(
+      { poId: id, movements: movementInserts.length },
+      `Goods received for PO — Stores In posted; next WO step: ${nextStep}`,
+    );
+
     res.json(serializePO({ ...updated, lineItems: liRows }));
   },
 );

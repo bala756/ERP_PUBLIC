@@ -262,17 +262,10 @@ purchaseRequestsRouter.post(
             .from(bomLineItemsTable)
             .where(eq(bomLineItemsTable.bomId, bomId));
 
-          // Also keep an entry for the manufactured FG itself so it can be tracked
-          aggregated.push({
-            productId: product.id,
-            workOrderItemId: item.id,
-            branch: "manufactured",
-            description: product.name,
-            unit: product.unit ?? item.unit ?? null,
-            requiredQty: qty,
-            estimatedUnitCost: parseFloat(product.defaultPurchasePrice),
-          });
-
+          // BOM-explode: a manufactured FG with a BOM is built in-house from
+          // its raw materials. We emit ONE raw PR row per BOM line and do NOT
+          // also emit a separate manufactured-FG PR row — emitting both would
+          // double-procure (FG and its components for the same WO demand).
           for (const line of lines) {
             const [raw] = await db
               .select()
@@ -528,6 +521,10 @@ const patchPrSchema = z.object({
     .array(
       z.object({
         id: z.number().int().positive(),
+        // shortfallQty is the qty to actually procure (matches OpenAPI spec).
+        shortfallQty: z.number().min(0).optional(),
+        // requiredQty kept for backward compat — if present, shortfall is
+        // recomputed from required - onHand.
         requiredQty: z.number().min(0).optional(),
         estimatedUnitCost: z.number().min(0).optional(),
         notes: z.string().nullable().optional(),
@@ -576,10 +573,8 @@ purchaseRequestsRouter.patch(
     if (data.items) {
       for (const it of data.items) {
         const update: Record<string, unknown> = {};
-        const reqQty = it.requiredQty;
-        if (reqQty !== undefined) {
-          update.requiredQty = reqQty.toString();
-          // recompute shortfall
+        if (it.requiredQty !== undefined) {
+          update.requiredQty = it.requiredQty.toString();
           const [existing] = await db
             .select()
             .from(purchaseRequestItemsTable)
@@ -587,13 +582,18 @@ purchaseRequestsRouter.patch(
           if (existing) {
             update.shortfallQty = Math.max(
               0,
-              reqQty - parseFloat(existing.onHandQty),
+              it.requiredQty - parseFloat(existing.onHandQty),
             ).toString();
           }
         }
-        const estCost = it.estimatedUnitCost;
-        if (estCost !== undefined)
-          update.estimatedUnitCost = estCost.toString();
+        // Direct shortfall override takes precedence (it's the qty that
+        // actually drives PO/import line quantities at approve time).
+        if (it.shortfallQty !== undefined) {
+          update.shortfallQty = it.shortfallQty.toString();
+        }
+        if (it.estimatedUnitCost !== undefined) {
+          update.estimatedUnitCost = it.estimatedUnitCost.toString();
+        }
         if (it.notes !== undefined) update.notes = it.notes;
         if (Object.keys(update).length > 0) {
           await db
