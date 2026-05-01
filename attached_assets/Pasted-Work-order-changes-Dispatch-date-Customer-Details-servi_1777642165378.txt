@@ -1,0 +1,78 @@
+Work order changes:
+
+Dispatch date
+Customer Details
+service and warranty period
+Services done against the work order
+project value vs expense 
+
+Currently we have create purchase request and line items workflow inside work order, which must be moved to purchase request
+
+Purchase request page
+
+Should have following details
+Purchase Request number
+Raised by details (employee name)
+Product name
+Quantity
+
+Note: here the item/product values should not be visible to the person raising the request
+
+Purchase order Page
+
+Against the purchase request number purchase order should be created 
+
+we can keep two separated pages one for in house manufacturing(Manufactured at our factory) and another page for imported landed items. 
+
+For in house manufacturing:-
+
+Based on the purchase request purchase order should be created incase if we have stock in hand means it should be displayed while making the purchase order so that we can deduct the stock and place the order to concern vendor. 
+
+purchase order format
+1.our company name with address and GST Number 
+2.work order number( it should be mapped against the work order) so that we can able to calculate the expense made and multiple work orders should not be mapped in a single purchase order
+3.Vendor details with GST Number 
+4. Payment terms 
+5. delivery timeline 
+6. warranty details if applicable 
+
+Purchase order dashboard should remains the same but when we click the po number that particular po should open 
+
+incase if the purchase order price and the price at the master database match means admin approval is enough for the procurement if there is any changes on the price means Director approval is needed. 
+
+For Imported Items :-
+
+Purchase order should be created from the imported & Landed cost page( better change this page name to imported items purchase order)
+
+First step as per the purchase request a job card should be created and it should be named similar to purchase request number 
+
+Here to arrive the products price we need to feed the below price to the job card and
+1.Product price( it will be on usd) 
+2.Shipping cost 
+3.clearance cost 
+4.local transport cost
+
+Now in The items in shipment tab we can able to enter the items name manually since we have created the job card based on the purchase request we should be able to choose only from the request given items and customs duty should be default 20%. Before calculating the duty, insurance percentage and ocean freight should be entered manually because duty will be calculated by adding the product cost+ Insurance + Ocean freight then it will converted to INR and here it should have two usd option one is for customs duty and one for making the payment to the vendor because usd rates will differ from bank to bank  
+
+After adding the product price and expense bills should be divided to each product price based on the CBM of the goods but here its not calculating like that. One container can accommodate around 65 to 68 CBM. so on the product price it should be Expenses Bills/CBM. 
+
+GST in india will be Either (2.5%+2.5% or 5% ) or (9+9 or 18%) So give only these percentage option. 
+
+
+Stores In pages 
+
+On Entry pages when we enter the goods purchase order number should be madnatory because we need to cross check whether the goods order and recived are matching. Incase if there is any shortage on the items means it should be highlighted 
+
+
+for Subcontract jobs 
+
+work order number is madnatory. 
+
+Final Stores out should be done only by raising invoice and work order number is madnatory 
+
+
+
+
+
+
+
