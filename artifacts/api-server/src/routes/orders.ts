@@ -1251,10 +1251,16 @@ ordersRouter.post(
           movementType: "in" as const,
           sourceType: "purchaseOrder" as const,
           sourceId: id,
+          // Hardening: also tag the dedicated FK so receipts are
+          // first-class linked to the PO without depending on sourceType.
+          purchaseOrderId: id,
           workOrderId: updated.workOrderId ?? null,
           qty: qty.toString(),
           unitCost: unitCost.toString(),
           totalCost: (qty * unitCost).toFixed(2),
+          // Full PO receive — no shortage by definition.
+          isShort: false,
+          shortageQty: "0",
           createdById: req.session.userId ?? null,
           notes: `PO receipt ${po.poNumber}`,
         };
@@ -1763,6 +1769,33 @@ ordersRouter.post(
           lineTotal: l.lineTotal,
         })),
       );
+    }
+
+    // Receipts hardening: emit a single dedicated zero-qty marker row
+    // tagged as the FINAL dispatch event for this WO, tied to the
+    // invoice. Prior production-time OUT movements are intentionally
+    // left untagged so the ledger preserves the distinction between
+    // production issues and the invoice-emitted dispatch event. The
+    // Stores Out form looks for any row with `isFinalDispatch=true` on
+    // the WO to block further manual issues. Using the first issued
+    // item just to satisfy the FK; qty/cost are 0 so on-hand and COGS
+    // are unaffected.
+    const markerItemId = movements[0]?.itemId;
+    if (markerItemId) {
+      await db.insert(stockMovementsTable).values({
+        itemId: markerItemId,
+        movementType: "out",
+        qty: "0",
+        unitCost: "0",
+        totalCost: "0",
+        sourceType: "manual",
+        sourceId: newInvoice.id,
+        sourceNumber: invoiceNumber,
+        workOrderId: id,
+        isFinalDispatch: true,
+        notes: `Final dispatch — invoice ${invoiceNumber}`,
+        createdById: req.session.userId ?? null,
+      });
     }
 
     // Mark as delivered + invoiced

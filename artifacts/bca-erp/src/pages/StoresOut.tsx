@@ -5,6 +5,7 @@ import {
   useCreateStockOut,
   useGetInventoryItems,
   useGetWorkOrders,
+  getGetStockMovementsQueryKey,
   CreateStockOutBodySourceType,
   type CreateStockOutBody,
 } from "@workspace/api-client-react";
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowUpCircle, Plus } from "lucide-react";
+import { ArrowUpCircle, Plus, Lock } from "lucide-react";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("en-IN", {
@@ -50,7 +51,7 @@ export default function StoresOut() {
             Stores Out
           </h1>
           <p className="text-sm text-muted-foreground">
-            Cost-stamped issues against Work Orders or Subcontract jobs
+            Issues against Work Orders. Once an invoice is generated for a WO, manual issues are locked.
           </p>
         </div>
         <Button onClick={() => setOpen(true)} data-testid="button-issue-stock">
@@ -97,7 +98,14 @@ export default function StoresOut() {
                     <TableCell className="text-right">₹{r.unitCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-semibold">₹{r.totalCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="font-mono text-xs">{r.workOrderNumber ?? "—"}</TableCell>
-                    <TableCell><Badge variant="outline">{SOURCE_LABELS[r.sourceType] ?? r.sourceType}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{SOURCE_LABELS[r.sourceType] ?? r.sourceType}</Badge>
+                      {r.isFinalDispatch && (
+                        <Badge className="ml-2 bg-blue-600 hover:bg-blue-600" data-testid={`badge-final-dispatch-${r.id}`}>
+                          Final Dispatch
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm">{r.createdByName ?? "—"}</TableCell>
                   </TableRow>
                 ))
@@ -121,7 +129,7 @@ function ManualStockOutDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState<CreateStockOutBody>({
     itemId: 0,
     qty: 0,
-    workOrderId: null,
+    workOrderId: 0,
     sourceType: CreateStockOutBodySourceType.workOrderIssue,
     notes: "",
   });
@@ -135,13 +143,34 @@ function ManualStockOutDialog({ onClose }: { onClose: () => void }) {
     [wos],
   );
 
+  // Pull movements for the selected WO to detect a final-dispatch lock.
+  const woMovementsParams = { workOrderId: form.workOrderId };
+  const { data: woMovements = [] } = useGetStockMovements(
+    woMovementsParams,
+    {
+      query: {
+        enabled: form.workOrderId > 0,
+        queryKey: getGetStockMovementsQueryKey(woMovementsParams),
+      },
+    },
+  );
+  const dispatchLocked = woMovements.some((m) => m.isFinalDispatch);
+
   const submit = async () => {
     if (!form.itemId || form.qty <= 0) {
       toast({ title: "Invalid entry", description: "Pick item and qty.", variant: "destructive" });
       return;
     }
-    if (form.sourceType === CreateStockOutBodySourceType.workOrderIssue && !form.workOrderId) {
+    if (!form.workOrderId) {
       toast({ title: "Pick a Work Order", variant: "destructive" });
+      return;
+    }
+    if (dispatchLocked) {
+      toast({
+        title: "Dispatch locked",
+        description: "This WO has a final dispatch (invoice). Manual stores-out is blocked.",
+        variant: "destructive",
+      });
       return;
     }
     if (selectedItem && form.qty > selectedItem.stockBalance) {
@@ -184,6 +213,12 @@ function ManualStockOutDialog({ onClose }: { onClose: () => void }) {
                 ))}
               </SelectContent>
             </Select>
+            {dispatchLocked && (
+              <div className="text-xs text-destructive mt-1 flex items-center gap-1" data-testid="text-dispatch-locked">
+                <Lock className="h-3 w-3" />
+                Final dispatch already issued for this WO — stores-out is locked.
+              </div>
+            )}
           </div>
           <div>
             <Label>Item</Label>
@@ -214,7 +249,11 @@ function ManualStockOutDialog({ onClose }: { onClose: () => void }) {
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={create.isPending} data-testid="button-stockout-submit">
+          <Button
+            onClick={submit}
+            disabled={create.isPending || dispatchLocked}
+            data-testid="button-stockout-submit"
+          >
             Issue Stock
           </Button>
         </DialogFooter>

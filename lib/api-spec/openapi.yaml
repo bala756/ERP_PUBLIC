@@ -2455,11 +2455,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/StockMovement"
 
+  /stock-movements/from-po:
+    post:
+      operationId: createStockInFromPo
+      tags: [pipeline]
+      summary: Record a batch Stores In keyed off an approved PO (with shortage detection)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockInFromPoBody"
+      responses:
+        "201":
+          description: Stores In rows created from PO lines
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockInFromPoResult"
+
   /stock-movements/out:
     post:
       operationId: createStockOut
       tags: [pipeline]
-      summary: Record a Stores Out movement (issue against a WO)
+      summary: Record a Stores Out movement (issue against a WO; blocked once final dispatch exists)
       requestBody:
         required: true
         content:
@@ -5655,6 +5674,18 @@ components:
         workOrderNumber:
           type: string
           nullable: true
+        purchaseOrderId:
+          type: integer
+          nullable: true
+        purchaseOrderNumber:
+          type: string
+          nullable: true
+        isShort:
+          type: boolean
+        shortageQty:
+          type: number
+        isFinalDispatch:
+          type: boolean
         notes:
           type: string
           nullable: true
@@ -5674,10 +5705,17 @@ components:
         - unitCost
         - totalCost
         - sourceType
+        - isShort
+        - shortageQty
+        - isFinalDispatch
         - createdAt
 
     CreateStockInBody:
       type: object
+      description: |
+        Manual single-item Stores In. The `purchaseOrderId` is REQUIRED — every
+        Stores In entry must be tied to a PO so that on-hand additions are
+        traceable to a supplier receipt.
       properties:
         itemId:
           type: integer
@@ -5685,6 +5723,8 @@ components:
           type: number
         unitCost:
           type: number
+        purchaseOrderId:
+          type: integer
         sourceType:
           type: string
           enum: [purchaseOrder, importJob, subcontractIn, production, manual, openingBalance]
@@ -5702,6 +5742,56 @@ components:
         - qty
         - unitCost
         - sourceType
+        - purchaseOrderId
+
+    StockInFromPoLineInput:
+      type: object
+      properties:
+        purchaseOrderLineId:
+          type: integer
+        receivedQty:
+          type: number
+        unitCost:
+          type: number
+          description: Optional override; defaults to PO line unitPrice.
+          nullable: true
+      required:
+        - purchaseOrderLineId
+        - receivedQty
+
+    StockInFromPoBody:
+      type: object
+      description: |
+        Bulk Stores In keyed off a Purchase Order. Pre-fills receipts from
+        approved PO line items. Per-line shortage (orderedQty − receivedQty)
+        is computed and stamped on the resulting stock_movements row.
+      properties:
+        purchaseOrderId:
+          type: integer
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockInFromPoLineInput"
+        notes:
+          type: string
+          nullable: true
+      required:
+        - purchaseOrderId
+        - lines
+
+    StockInFromPoResult:
+      type: object
+      properties:
+        purchaseOrderId:
+          type: integer
+        movementsCreated:
+          type: integer
+        shortLines:
+          type: integer
+      required:
+        - purchaseOrderId
+        - movementsCreated
+        - shortLines
 
     CreateStockOutBody:
       type: object
@@ -5712,7 +5802,6 @@ components:
           type: number
         workOrderId:
           type: integer
-          nullable: true
         sourceType:
           type: string
           enum: [workOrderIssue, subcontractIssue, manual]
@@ -5722,6 +5811,7 @@ components:
       required:
         - itemId
         - qty
+        - workOrderId
         - sourceType
 
     SubcontractJob:
@@ -5733,7 +5823,6 @@ components:
           type: string
         workOrderId:
           type: integer
-          nullable: true
         workOrderNumber:
           type: string
           nullable: true
@@ -5768,6 +5857,7 @@ components:
       required:
         - id
         - jobNumber
+        - workOrderId
         - vendorName
         - status
         - totalVendorCost
@@ -5839,10 +5929,12 @@ components:
 
     CreateSubcontractJobBody:
       type: object
+      description: |
+        Subcontract jobs MUST be tied to a Work Order so vendor cost lands
+        against the right WO P&L. The `workOrderId` is required.
       properties:
         workOrderId:
           type: integer
-          nullable: true
         vendorName:
           type: string
         vendorContact:
@@ -5872,6 +5964,7 @@ components:
               - rawItemId
               - sentQty
       required:
+        - workOrderId
         - vendorName
         - items
 

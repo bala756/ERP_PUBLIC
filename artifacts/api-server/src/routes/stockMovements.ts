@@ -5,7 +5,8 @@ import {
   stockTransactionsTable,
   inventoryItemsTable,
   workOrdersTable,
-  workOrderItemsTable,
+  purchaseOrdersTable,
+  poLineItemsTable,
   usersTable,
 } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -46,17 +47,23 @@ const SOURCE_TYPES = [
   "openingBalance",
 ] as const;
 
+// Stores In hardening: every manual Stores In must be tied to an approved PO
+// so on-hand additions are traceable to a supplier receipt. The PO existence
+// + approved-status check is enforced in the route handler below.
 const stockInSchema = z.object({
   itemId: z.number().int().positive(),
   qty: z.number().positive(),
   unitCost: z.number().min(0),
-  sourceType: z.enum(SOURCE_TYPES).default("manual"),
+  purchaseOrderId: z.number().int().positive(),
+  sourceType: z.enum(SOURCE_TYPES).default("purchaseOrder"),
   sourceId: z.number().int().positive().optional().nullable(),
   sourceNumber: z.string().max(100).optional().nullable(),
   workOrderId: z.number().int().positive().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
+// Stores Out hardening: workOrderId is required (every issue is against a WO)
+// and is rejected once a final-dispatch marker exists for that WO.
 const stockOutSchema = z.object({
   itemId: z.number().int().positive(),
   qty: z.number().positive(),
@@ -65,10 +72,23 @@ const stockOutSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
+const stockInFromPoLineSchema = z.object({
+  purchaseOrderLineId: z.number().int().positive(),
+  receivedQty: z.number().min(0),
+  unitCost: z.number().min(0).optional().nullable(),
+});
+
+const stockInFromPoSchema = z.object({
+  purchaseOrderId: z.number().int().positive(),
+  lines: z.array(stockInFromPoLineSchema).min(1),
+  notes: z.string().optional().nullable(),
+});
+
 function serializeMovement(
   row: typeof stockMovementsTable.$inferSelect & {
     item?: { name: string; itemCode: string | null; unit: string } | null;
     workOrder?: { woNumber: string } | null;
+    purchaseOrder?: { poNumber: string } | null;
     createdBy?: { name: string } | null;
   },
 ) {
@@ -88,6 +108,11 @@ function serializeMovement(
     workOrderId: row.workOrderId ?? null,
     workOrderNumber: row.workOrder?.woNumber ?? null,
     woNumber: row.workOrder?.woNumber ?? null,
+    purchaseOrderId: row.purchaseOrderId ?? null,
+    purchaseOrderNumber: row.purchaseOrder?.poNumber ?? null,
+    isShort: row.isShort,
+    shortageQty: parseFloat(row.shortageQty),
+    isFinalDispatch: row.isFinalDispatch,
     notes: row.notes ?? null,
     createdByName: row.createdBy?.name ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -121,9 +146,6 @@ async function getMovingAvgCost(itemId: number): Promise<number> {
   const remainingCost = parseFloat(
     (movRes.rows[0] as { cost: string }).cost ?? "0",
   );
-  // Guard against tiny negative remainders from floating arithmetic; if
-  // the layer is empty (or briefly negative due to rounding), fall back to
-  // the most recent IN row's unit cost so issues never get a 0 stamp.
   if (remainingQty > 0.0001) {
     return remainingCost / remainingQty;
   }
@@ -145,6 +167,19 @@ async function getOnHand(itemId: number): Promise<number> {
   return parseFloat(
     (movRes.rows[0] as { balance: string }).balance ?? "0",
   );
+}
+
+/**
+ * Returns true if a final-dispatch (invoice-emitted) marker already exists
+ * for the given WO. When true, manual Stores Out entries against this WO
+ * MUST be rejected — the dispatch is sealed by the invoice.
+ */
+async function hasFinalDispatch(workOrderId: number): Promise<boolean> {
+  const r = await db.execute<{ c: string }>(
+    sql`SELECT COUNT(*)::text AS c FROM stock_movements
+        WHERE work_order_id = ${workOrderId} AND is_final_dispatch = true`,
+  );
+  return parseInt(r.rows[0]?.c ?? "0", 10) > 0;
 }
 
 // ─── GET /stock-movements ────────────────────────────────────────────────────
@@ -172,6 +207,7 @@ stockMovementsRouter.get(
         m: stockMovementsTable,
         item: inventoryItemsTable,
         wo: workOrdersTable,
+        po: purchaseOrdersTable,
         createdBy: usersTable,
       })
       .from(stockMovementsTable)
@@ -182,6 +218,10 @@ stockMovementsRouter.get(
       .leftJoin(
         workOrdersTable,
         eq(workOrdersTable.id, stockMovementsTable.workOrderId),
+      )
+      .leftJoin(
+        purchaseOrdersTable,
+        eq(purchaseOrdersTable.id, stockMovementsTable.purchaseOrderId),
       )
       .leftJoin(
         usersTable,
@@ -203,6 +243,7 @@ stockMovementsRouter.get(
               }
             : null,
           workOrder: r.wo ? { woNumber: r.wo.woNumber } : null,
+          purchaseOrder: r.po ? { poNumber: r.po.poNumber } : null,
           createdBy: r.createdBy ? { name: r.createdBy.name } : null,
         }),
       ),
@@ -211,16 +252,36 @@ stockMovementsRouter.get(
 );
 
 // ─── POST /stock-movements/in ────────────────────────────────────────────────
+// Manual single-item Stores In. Requires a valid, approved/received PO so that
+// on-hand additions are always traceable to an authorised supplier receipt.
 stockMovementsRouter.post(
   "/stock-movements/in",
   requireRole(...WRITE_ROLES),
   async (req, res) => {
     const parsed = stockInSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+      res
+        .status(400)
+        .json({ error: "Invalid body", details: parsed.error.issues });
       return;
     }
     const d = parsed.data;
+
+    const [po] = await db
+      .select()
+      .from(purchaseOrdersTable)
+      .where(eq(purchaseOrdersTable.id, d.purchaseOrderId));
+    if (!po) {
+      res.status(400).json({ error: "Purchase order not found" });
+      return;
+    }
+    if (po.status !== "approved" && po.status !== "received") {
+      res.status(400).json({
+        error: `Stores In requires PO status approved or received (PO is ${po.status})`,
+      });
+      return;
+    }
+
     const totalCost = d.qty * d.unitCost;
 
     const [created] = await db
@@ -232,9 +293,10 @@ stockMovementsRouter.post(
         unitCost: d.unitCost.toString(),
         totalCost: totalCost.toString(),
         sourceType: d.sourceType,
-        sourceId: d.sourceId ?? null,
-        sourceNumber: d.sourceNumber ?? null,
-        workOrderId: d.workOrderId ?? null,
+        sourceId: d.sourceId ?? d.purchaseOrderId,
+        sourceNumber: d.sourceNumber ?? po.poNumber,
+        purchaseOrderId: d.purchaseOrderId,
+        workOrderId: d.workOrderId ?? po.workOrderId ?? null,
         notes: d.notes ?? null,
         createdById: req.session.userId ?? null,
       })
@@ -247,14 +309,9 @@ stockMovementsRouter.post(
         type: "in",
         qty: d.qty.toString(),
         rate: d.unitCost.toString(),
-        referenceType:
-          d.sourceType === "purchaseOrder"
-            ? "po"
-            : d.sourceType === "workOrderIssue"
-              ? "workOrder"
-              : "manual",
-        referenceId: d.sourceId ?? null,
-        referenceNumber: d.sourceNumber ?? null,
+        referenceType: "purchaseOrder",
+        referenceId: d.purchaseOrderId,
+        referenceNumber: po.poNumber,
         notes: d.notes ?? null,
         createdById: req.session.userId ?? null,
       });
@@ -266,22 +323,192 @@ stockMovementsRouter.post(
     }
 
     res.status(201).json({ id: created.id });
-
     return;
   },
 );
 
+// ─── POST /stock-movements/from-po ───────────────────────────────────────────
+// Bulk Stores In keyed off a Purchase Order. Pre-fills receipts from approved
+// PO line items, computes per-line shortage (orderedQty − receivedQty) and
+// stamps it on each created stock_movements row.
+stockMovementsRouter.post(
+  "/stock-movements/from-po",
+  requireRole(...WRITE_ROLES),
+  async (req, res) => {
+    const parsed = stockInFromPoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res
+        .status(400)
+        .json({ error: "Invalid body", details: parsed.error.issues });
+      return;
+    }
+    const d = parsed.data;
+
+    const [po] = await db
+      .select()
+      .from(purchaseOrdersTable)
+      .where(eq(purchaseOrdersTable.id, d.purchaseOrderId));
+    if (!po) {
+      res.status(404).json({ error: "Purchase order not found" });
+      return;
+    }
+    if (po.status !== "approved" && po.status !== "received") {
+      res.status(400).json({
+        error: `PO must be approved or received (currently ${po.status})`,
+      });
+      return;
+    }
+
+    const liRows = await db
+      .select()
+      .from(poLineItemsTable)
+      .where(eq(poLineItemsTable.purchaseOrderId, d.purchaseOrderId));
+    const liById = new Map(liRows.map((li) => [li.id, li]));
+
+    // Cumulative receipts so far for this PO, keyed by productId. We
+    // compute shortage against (ordered − historicalReceived − thisReceipt)
+    // so installment receipts don't keep reporting the same shortage.
+    const priorRows = await db
+      .select({
+        itemId: stockMovementsTable.itemId,
+        qty: stockMovementsTable.qty,
+      })
+      .from(stockMovementsTable)
+      .where(
+        and(
+          eq(stockMovementsTable.purchaseOrderId, d.purchaseOrderId),
+          eq(stockMovementsTable.movementType, "in"),
+        ),
+      );
+    const priorReceivedByItem = new Map<number, number>();
+    for (const r of priorRows) {
+      priorReceivedByItem.set(
+        r.itemId,
+        (priorReceivedByItem.get(r.itemId) ?? 0) + parseFloat(r.qty),
+      );
+    }
+
+    const inserts: (typeof stockMovementsTable.$inferInsert)[] = [];
+    let shortLines = 0;
+    for (const line of d.lines) {
+      const li = liById.get(line.purchaseOrderLineId);
+      if (!li) {
+        res.status(400).json({
+          error: `PO line ${line.purchaseOrderLineId} not found on this PO`,
+        });
+        return;
+      }
+      if (li.productId === null) {
+        // Skip PO lines that aren't tied to a product (free-form items
+        // never feed inventory).
+        continue;
+      }
+      const orderedQty = parseFloat(li.qty);
+      const unitCost = line.unitCost ?? parseFloat(li.unitPrice);
+      const receivedQty = line.receivedQty;
+      const priorReceived = priorReceivedByItem.get(li.productId) ?? 0;
+      const cumulativeReceived = priorReceived + receivedQty;
+      const shortageQty = Math.max(0, orderedQty - cumulativeReceived);
+      const isShort = shortageQty > 0.0001;
+      if (isShort) shortLines += 1;
+
+      if (receivedQty <= 0 && !isShort) continue;
+
+      inserts.push({
+        itemId: li.productId,
+        movementType: "in",
+        qty: receivedQty.toString(),
+        unitCost: unitCost.toString(),
+        totalCost: (receivedQty * unitCost).toFixed(2),
+        sourceType: "purchaseOrder",
+        sourceId: d.purchaseOrderId,
+        sourceNumber: po.poNumber,
+        purchaseOrderId: d.purchaseOrderId,
+        workOrderId: po.workOrderId ?? null,
+        isShort,
+        shortageQty: shortageQty.toFixed(4),
+        notes:
+          d.notes ??
+          (isShort
+            ? `PO ${po.poNumber} — short by ${shortageQty} (${li.description})`
+            : `PO ${po.poNumber} receipt`),
+        createdById: req.session.userId ?? null,
+      });
+      // Update running tally so multiple lines on the same product within
+      // one submission also chain correctly.
+      priorReceivedByItem.set(li.productId, cumulativeReceived);
+    }
+
+    if (inserts.length === 0) {
+      res.status(400).json({
+        error: "No line receipts to record (all qtys zero or no productId)",
+      });
+      return;
+    }
+
+    await db.insert(stockMovementsTable).values(inserts);
+
+    try {
+      await db.insert(stockTransactionsTable).values(
+        inserts.map((m) => ({
+          itemId: m.itemId,
+          type: "in" as const,
+          qty: m.qty,
+          rate: m.unitCost ?? "0",
+          referenceType: "purchaseOrder" as const,
+          referenceId: d.purchaseOrderId,
+          referenceNumber: po.poNumber,
+          notes: m.notes ?? null,
+          createdById: req.session.userId ?? null,
+        })),
+      );
+    } catch (err) {
+      logger.warn(
+        { err },
+        "from-po: stock_transactions mirror failed (movements still posted)",
+      );
+    }
+
+    logger.info(
+      {
+        poId: d.purchaseOrderId,
+        movements: inserts.length,
+        shortLines,
+      },
+      "Stores In from PO posted",
+    );
+
+    res.status(201).json({
+      purchaseOrderId: d.purchaseOrderId,
+      movementsCreated: inserts.length,
+      shortLines,
+    });
+  },
+);
+
 // ─── POST /stock-movements/out ───────────────────────────────────────────────
+// Manual Stores Out. workOrderId is mandatory and the route rejects new
+// issues once the WO has been finalised by an invoice (final-dispatch marker).
 stockMovementsRouter.post(
   "/stock-movements/out",
   requireRole(...WRITE_ROLES),
   async (req, res) => {
     const parsed = stockOutSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+      res
+        .status(400)
+        .json({ error: "Invalid body", details: parsed.error.issues });
       return;
     }
     const d = parsed.data;
+
+    if (await hasFinalDispatch(d.workOrderId)) {
+      res.status(409).json({
+        error:
+          "This WO has already been finalised by an invoice (final dispatch). Manual Stores Out is blocked.",
+      });
+      return;
+    }
 
     const onHand = await getOnHand(d.itemId);
     if (onHand < d.qty) {
@@ -314,7 +541,6 @@ stockMovementsRouter.post(
       })
       .returning();
 
-    // Mirror into legacy stock_transactions
     try {
       await db.insert(stockTransactionsTable).values({
         itemId: d.itemId,
@@ -334,9 +560,7 @@ stockMovementsRouter.post(
       );
     }
 
-    res
-      .status(201)
-      .json({ id: created.id, unitCost, totalCost });
+    res.status(201).json({ id: created.id, unitCost, totalCost });
   },
 );
 

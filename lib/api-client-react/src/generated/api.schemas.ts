@@ -1757,6 +1757,11 @@ export interface StockMovement {
   sourceNumber?: string | null;
   workOrderId?: number | null;
   workOrderNumber?: string | null;
+  purchaseOrderId?: number | null;
+  purchaseOrderNumber?: string | null;
+  isShort: boolean;
+  shortageQty: number;
+  isFinalDispatch: boolean;
   notes?: string | null;
   createdById?: number | null;
   createdByName?: string | null;
@@ -1775,14 +1780,46 @@ export const CreateStockInBodySourceType = {
   openingBalance: "openingBalance",
 } as const;
 
+/**
+ * Manual single-item Stores In. The `purchaseOrderId` is REQUIRED — every
+Stores In entry must be tied to a PO so that on-hand additions are
+traceable to a supplier receipt.
+
+ */
 export interface CreateStockInBody {
   itemId: number;
   qty: number;
   unitCost: number;
+  purchaseOrderId: number;
   sourceType: CreateStockInBodySourceType;
   sourceId?: number | null;
   sourceNumber?: string | null;
   notes?: string | null;
+}
+
+export interface StockInFromPoLineInput {
+  purchaseOrderLineId: number;
+  receivedQty: number;
+  /** Optional override; defaults to PO line unitPrice. */
+  unitCost?: number | null;
+}
+
+/**
+ * Bulk Stores In keyed off a Purchase Order. Pre-fills receipts from
+approved PO line items. Per-line shortage (orderedQty − receivedQty)
+is computed and stamped on the resulting stock_movements row.
+
+ */
+export interface StockInFromPoBody {
+  purchaseOrderId: number;
+  lines: StockInFromPoLineInput[];
+  notes?: string | null;
+}
+
+export interface StockInFromPoResult {
+  purchaseOrderId: number;
+  movementsCreated: number;
+  shortLines: number;
 }
 
 export type CreateStockOutBodySourceType =
@@ -1797,7 +1834,7 @@ export const CreateStockOutBodySourceType = {
 export interface CreateStockOutBody {
   itemId: number;
   qty: number;
-  workOrderId?: number | null;
+  workOrderId: number;
   sourceType: CreateStockOutBodySourceType;
   notes?: string | null;
 }
@@ -1814,7 +1851,7 @@ export const SubcontractJobStatus = {
 export interface SubcontractJob {
   id: number;
   jobNumber: string;
-  workOrderId?: number | null;
+  workOrderId: number;
   workOrderNumber?: string | null;
   vendorName: string;
   vendorContact?: string | null;
@@ -1859,8 +1896,13 @@ export type CreateSubcontractJobBodyItemsItem = {
   notes?: string | null;
 };
 
+/**
+ * Subcontract jobs MUST be tied to a Work Order so vendor cost lands
+against the right WO P&L. The `workOrderId` is required.
+
+ */
 export interface CreateSubcontractJobBody {
-  workOrderId?: number | null;
+  workOrderId: number;
   vendorName: string;
   vendorContact?: string | null;
   notes?: string | null;

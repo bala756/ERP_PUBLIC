@@ -5,6 +5,7 @@ import {
   integer,
   text,
   timestamp,
+  boolean,
   numeric,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -136,6 +137,24 @@ export const stockMovementsTable = pgTable("stock_movements", {
   workOrderId: integer("work_order_id").references(() => workOrdersTable.id, {
     onDelete: "set null",
   }),
+  // Stores In hardening: PO that this receipt is tied to (required for
+  // manual Stores In entries and PO-receive flow). Nullable in DB so
+  // legacy rows and non-PO source types (subcontractIn, importJob,
+  // openingBalance, production) keep working.
+  purchaseOrderId: integer("purchase_order_id").references(
+    () => purchaseOrdersTable.id,
+    { onDelete: "set null" },
+  ),
+  // Marks an IN row whose received qty was less than what the PO line
+  // ordered. Surfaced in the Stores In ledger as a "Short" badge.
+  isShort: boolean("is_short").notNull().default(false),
+  shortageQty: numeric("shortage_qty", { precision: 14, scale: 4 })
+    .notNull()
+    .default("0"),
+  // Marks an OUT row that represents the FINAL dispatch of finished goods
+  // to the customer (emitted by generate-invoice-from-stores). Once any
+  // such row exists for a WO, the manual Stores Out form is blocked.
+  isFinalDispatch: boolean("is_final_dispatch").notNull().default(false),
   notes: text("notes"),
   createdById: integer("created_by_id").references(() => usersTable.id, {
     onDelete: "set null",
@@ -156,9 +175,13 @@ export const subcontractJobStatusEnum = pgEnum("subcontract_job_status", [
 export const subcontractJobsTable = pgTable("subcontract_jobs", {
   id: serial("id").primaryKey(),
   jobNumber: text("job_number").notNull().unique(),
-  workOrderId: integer("work_order_id").references(() => workOrdersTable.id, {
-    onDelete: "set null",
-  }),
+  // Hardened: every subcontract job must be tied to a Work Order. Pre-cutover
+  // orphan rows are back-filled in the migration step.
+  workOrderId: integer("work_order_id")
+    .notNull()
+    .references(() => workOrdersTable.id, {
+      onDelete: "cascade",
+    }),
   vendorName: text("vendor_name").notNull(),
   vendorContact: text("vendor_contact"),
   status: subcontractJobStatusEnum("status").notNull().default("sentOut"),

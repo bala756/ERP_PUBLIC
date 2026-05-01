@@ -95,8 +95,10 @@ async function getOnHand(itemId: number): Promise<number> {
   );
 }
 
+// Hardening: every subcontract job MUST be tied to a WO so vendor cost
+// lands against the right WO P&L. workOrderId is required.
 const createSchema = z.object({
-  workOrderId: z.number().int().positive().optional().nullable(),
+  workOrderId: z.number().int().positive(),
   vendorName: z.string().min(1).max(255),
   vendorContact: z.string().max(255).optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -206,11 +208,22 @@ subcontractJobsRouter.post(
     }
 
     const jobNumber = await generateSubcontractJobNumber();
+    // Sanity check: the WO must exist; the FK enforces it but a clearer
+    // error helps the UI vs. a generic 23503.
+    const [woCheck] = await db
+      .select({ id: workOrdersTable.id })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, d.workOrderId));
+    if (!woCheck) {
+      res.status(400).json({ error: "Work order not found" });
+      return;
+    }
+
     const [job] = await db
       .insert(subcontractJobsTable)
       .values({
         jobNumber,
-        workOrderId: d.workOrderId ?? null,
+        workOrderId: d.workOrderId,
         vendorName: d.vendorName,
         vendorContact: d.vendorContact ?? null,
         status: "sentOut",
@@ -246,7 +259,7 @@ subcontractJobsRouter.post(
         sourceType: "subcontractIssue",
         sourceId: job.id,
         sourceNumber: jobNumber,
-        workOrderId: d.workOrderId ?? null,
+        workOrderId: d.workOrderId,
         notes: `Sent out to ${d.vendorName}`,
         createdById: req.session.userId ?? null,
       });

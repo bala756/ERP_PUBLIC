@@ -107,6 +107,8 @@ import type {
   RequestUploadUrlResponse,
   ServiceOrder,
   SetLeaveBalanceBody,
+  StockInFromPoBody,
+  StockInFromPoResult,
   StockLedger,
   StockMovement,
   StockTransaction,
@@ -10180,7 +10182,93 @@ export const useCreateStockIn = <
 };
 
 /**
- * @summary Record a Stores Out movement (issue against a WO)
+ * @summary Record a batch Stores In keyed off an approved PO (with shortage detection)
+ */
+export const getCreateStockInFromPoUrl = () => {
+  return `/api/stock-movements/from-po`;
+};
+
+export const createStockInFromPo = async (
+  stockInFromPoBody: StockInFromPoBody,
+  options?: RequestInit,
+): Promise<StockInFromPoResult> => {
+  return customFetch<StockInFromPoResult>(getCreateStockInFromPoUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(stockInFromPoBody),
+  });
+};
+
+export const getCreateStockInFromPoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStockInFromPo>>,
+    TError,
+    { data: BodyType<StockInFromPoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createStockInFromPo>>,
+  TError,
+  { data: BodyType<StockInFromPoBody> },
+  TContext
+> => {
+  const mutationKey = ["createStockInFromPo"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createStockInFromPo>>,
+    { data: BodyType<StockInFromPoBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createStockInFromPo(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateStockInFromPoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createStockInFromPo>>
+>;
+export type CreateStockInFromPoMutationBody = BodyType<StockInFromPoBody>;
+export type CreateStockInFromPoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a batch Stores In keyed off an approved PO (with shortage detection)
+ */
+export const useCreateStockInFromPo = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createStockInFromPo>>,
+    TError,
+    { data: BodyType<StockInFromPoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createStockInFromPo>>,
+  TError,
+  { data: BodyType<StockInFromPoBody> },
+  TContext
+> => {
+  return useMutation(getCreateStockInFromPoMutationOptions(options));
+};
+
+/**
+ * @summary Record a Stores Out movement (issue against a WO; blocked once final dispatch exists)
  */
 export const getCreateStockOutUrl = () => {
   return `/api/stock-movements/out`;
@@ -10243,7 +10331,7 @@ export type CreateStockOutMutationBody = BodyType<CreateStockOutBody>;
 export type CreateStockOutMutationError = ErrorType<unknown>;
 
 /**
- * @summary Record a Stores Out movement (issue against a WO)
+ * @summary Record a Stores Out movement (issue against a WO; blocked once final dispatch exists)
  */
 export const useCreateStockOut = <
   TError = ErrorType<unknown>,

@@ -152,16 +152,21 @@ function CreateSubcontractDialog({ onClose }: { onClose: () => void }) {
 
   const isValid =
     vendorName.trim().length > 0 &&
+    Number(workOrderId) > 0 &&
     lines.length > 0 &&
     lines.every(
       (l) => Number(l.rawItemId) > 0 && Number(l.sentQty) > 0 && Number(l.vendorChargePerUnit) >= 0,
     );
 
   const handleCreate = async () => {
+    if (!workOrderId) {
+      toast({ title: "Pick a Work Order", description: "Subcontract jobs must be tied to a WO.", variant: "destructive" });
+      return;
+    }
     const body = {
       vendorName: vendorName.trim(),
       vendorContact: vendorContact.trim() || null,
-      workOrderId: workOrderId ? Number(workOrderId) : null,
+      workOrderId: Number(workOrderId),
       notes: notes.trim() || null,
       items: lines.map((l) => ({
         rawItemId: Number(l.rawItemId),
@@ -213,13 +218,12 @@ function CreateSubcontractDialog({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div>
-            <Label>Linked Work Order</Label>
-            <Select value={workOrderId || "_none"} onValueChange={(v) => setWorkOrderId(v === "_none" ? "" : v)}>
+            <Label>Linked Work Order *</Label>
+            <Select value={workOrderId} onValueChange={setWorkOrderId}>
               <SelectTrigger data-testid="select-sc-wo">
-                <SelectValue placeholder="(none)" />
+                <SelectValue placeholder="Pick a WO…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">(none)</SelectItem>
                 {workOrders.map((w) => (
                   <SelectItem key={w.id} value={String(w.id)}>
                     {w.woNumber} — {w.customerName}
@@ -227,6 +231,9 @@ function CreateSubcontractDialog({ onClose }: { onClose: () => void }) {
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Required — vendor cost lands against this WO's P&amp;L.
+            </p>
           </div>
           <div>
             <Label>Notes</Label>

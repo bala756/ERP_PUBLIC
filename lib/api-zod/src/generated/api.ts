@@ -4808,6 +4808,11 @@ export const GetStockMovementsResponseItem = zod.object({
   sourceNumber: zod.string().nullish(),
   workOrderId: zod.number().nullish(),
   workOrderNumber: zod.string().nullish(),
+  purchaseOrderId: zod.number().nullish(),
+  purchaseOrderNumber: zod.string().nullish(),
+  isShort: zod.boolean(),
+  shortageQty: zod.number(),
+  isFinalDispatch: zod.boolean(),
   notes: zod.string().nullish(),
   createdById: zod.number().nullish(),
   createdByName: zod.string().nullish(),
@@ -4820,30 +4825,57 @@ export const GetStockMovementsResponse = zod.array(
 /**
  * @summary Record a Stores In movement (manual or from upstream source)
  */
-export const CreateStockInBody = zod.object({
-  itemId: zod.number(),
-  qty: zod.number(),
-  unitCost: zod.number(),
-  sourceType: zod.enum([
-    "purchaseOrder",
-    "importJob",
-    "subcontractIn",
-    "production",
-    "manual",
-    "openingBalance",
-  ]),
-  sourceId: zod.number().nullish(),
-  sourceNumber: zod.string().nullish(),
-  notes: zod.string().nullish(),
-});
+export const CreateStockInBody = zod
+  .object({
+    itemId: zod.number(),
+    qty: zod.number(),
+    unitCost: zod.number(),
+    purchaseOrderId: zod.number(),
+    sourceType: zod.enum([
+      "purchaseOrder",
+      "importJob",
+      "subcontractIn",
+      "production",
+      "manual",
+      "openingBalance",
+    ]),
+    sourceId: zod.number().nullish(),
+    sourceNumber: zod.string().nullish(),
+    notes: zod.string().nullish(),
+  })
+  .describe(
+    "Manual single-item Stores In. The `purchaseOrderId` is REQUIRED — every\nStores In entry must be tied to a PO so that on-hand additions are\ntraceable to a supplier receipt.\n",
+  );
 
 /**
- * @summary Record a Stores Out movement (issue against a WO)
+ * @summary Record a batch Stores In keyed off an approved PO (with shortage detection)
+ */
+export const CreateStockInFromPoBody = zod
+  .object({
+    purchaseOrderId: zod.number(),
+    lines: zod.array(
+      zod.object({
+        purchaseOrderLineId: zod.number(),
+        receivedQty: zod.number(),
+        unitCost: zod
+          .number()
+          .nullish()
+          .describe("Optional override; defaults to PO line unitPrice."),
+      }),
+    ),
+    notes: zod.string().nullish(),
+  })
+  .describe(
+    "Bulk Stores In keyed off a Purchase Order. Pre-fills receipts from\napproved PO line items. Per-line shortage (orderedQty − receivedQty)\nis computed and stamped on the resulting stock_movements row.\n",
+  );
+
+/**
+ * @summary Record a Stores Out movement (issue against a WO; blocked once final dispatch exists)
  */
 export const CreateStockOutBody = zod.object({
   itemId: zod.number(),
   qty: zod.number(),
-  workOrderId: zod.number().nullish(),
+  workOrderId: zod.number(),
   sourceType: zod.enum(["workOrderIssue", "subcontractIssue", "manual"]),
   notes: zod.string().nullish(),
 });
@@ -4859,7 +4891,7 @@ export const GetSubcontractJobsQueryParams = zod.object({
 export const GetSubcontractJobsResponseItem = zod.object({
   id: zod.number(),
   jobNumber: zod.string(),
-  workOrderId: zod.number().nullish(),
+  workOrderId: zod.number(),
   workOrderNumber: zod.string().nullish(),
   vendorName: zod.string(),
   vendorContact: zod.string().nullish(),
@@ -4880,21 +4912,25 @@ export const GetSubcontractJobsResponse = zod.array(
 /**
  * @summary Create a Subcontract Job Out (issues raw materials to a vendor)
  */
-export const CreateSubcontractJobBody = zod.object({
-  workOrderId: zod.number().nullish(),
-  vendorName: zod.string(),
-  vendorContact: zod.string().nullish(),
-  notes: zod.string().nullish(),
-  items: zod.array(
-    zod.object({
-      rawItemId: zod.number(),
-      sentQty: zod.number(),
-      finishedItemId: zod.number().nullish(),
-      vendorChargePerUnit: zod.number().optional(),
-      notes: zod.string().nullish(),
-    }),
-  ),
-});
+export const CreateSubcontractJobBody = zod
+  .object({
+    workOrderId: zod.number(),
+    vendorName: zod.string(),
+    vendorContact: zod.string().nullish(),
+    notes: zod.string().nullish(),
+    items: zod.array(
+      zod.object({
+        rawItemId: zod.number(),
+        sentQty: zod.number(),
+        finishedItemId: zod.number().nullish(),
+        vendorChargePerUnit: zod.number().optional(),
+        notes: zod.string().nullish(),
+      }),
+    ),
+  })
+  .describe(
+    "Subcontract jobs MUST be tied to a Work Order so vendor cost lands\nagainst the right WO P&L. The `workOrderId` is required.\n",
+  );
 
 /**
  * @summary Get a subcontract job with items
@@ -4907,7 +4943,7 @@ export const GetSubcontractJobResponse = zod
   .object({
     id: zod.number(),
     jobNumber: zod.string(),
-    workOrderId: zod.number().nullish(),
+    workOrderId: zod.number(),
     workOrderNumber: zod.string().nullish(),
     vendorName: zod.string(),
     vendorContact: zod.string().nullish(),
@@ -4970,7 +5006,7 @@ export const ReceiveSubcontractJobResponse = zod
   .object({
     id: zod.number(),
     jobNumber: zod.string(),
-    workOrderId: zod.number().nullish(),
+    workOrderId: zod.number(),
     workOrderNumber: zod.string().nullish(),
     vendorName: zod.string(),
     vendorContact: zod.string().nullish(),

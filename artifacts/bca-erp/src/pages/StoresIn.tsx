@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetStockMovements,
-  useCreateStockIn,
-  useGetInventoryItems,
-  CreateStockInBodySourceType,
-  type CreateStockInBody,
+  useCreateStockInFromPo,
+  useGetPurchaseOrders,
+  useGetPurchaseOrder,
+  getGetPurchaseOrderQueryKey,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -18,11 +18,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowDownCircle, Plus } from "lucide-react";
+import { ArrowDownCircle, Plus, AlertTriangle } from "lucide-react";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("en-IN", {
@@ -52,12 +52,12 @@ export default function StoresIn() {
             Stores In
           </h1>
           <p className="text-sm text-muted-foreground">
-            Cost-stamped goods receipts (auto from POs/imports/subcontract or manual)
+            Goods receipts — every entry is tied to an approved Purchase Order, with shortage detection.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)} data-testid="button-manual-stock-in">
+        <Button onClick={() => setOpen(true)} data-testid="button-receive-from-po">
           <Plus className="mr-2 h-4 w-4" />
-          Manual Entry
+          Receive from PO
         </Button>
       </div>
 
@@ -71,8 +71,8 @@ export default function StoresIn() {
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Unit Cost</TableHead>
                 <TableHead className="text-right">Total Cost</TableHead>
+                <TableHead>PO</TableHead>
                 <TableHead>Source</TableHead>
-                <TableHead>Reference</TableHead>
                 <TableHead>By</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,14 +95,26 @@ export default function StoresIn() {
                       <div className="font-medium">{r.itemName ?? `#${r.itemId}`}</div>
                       {r.itemCode && <div className="text-xs font-mono text-muted-foreground">{r.itemCode}</div>}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-green-700">+{r.qty}</TableCell>
+                    <TableCell className="text-right font-semibold text-green-700">
+                      +{r.qty}
+                      {r.isShort && (
+                        <Badge variant="destructive" className="ml-2" data-testid={`badge-short-${r.id}`}>
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Short {r.shortageQty}
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">₹{r.unitCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-semibold">₹{r.totalCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-sm">
+                      {r.purchaseOrderNumber ? (
+                        <span className="font-mono text-xs">{r.purchaseOrderNumber}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">{SOURCE_LABELS[r.sourceType] ?? r.sourceType}</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {r.sourceNumber ? <span className="font-mono text-xs">{r.sourceNumber}</span> : "—"}
                     </TableCell>
                     <TableCell className="text-sm">{r.createdByName ?? "—"}</TableCell>
                   </TableRow>
@@ -113,34 +125,82 @@ export default function StoresIn() {
         </CardContent>
       </Card>
 
-      {open && <ManualStockInDialog onClose={() => setOpen(false)} />}
+      {open && <ReceiveFromPoDialog onClose={() => setOpen(false)} />}
     </div>
   );
 }
 
-function ManualStockInDialog({ onClose }: { onClose: () => void }) {
-  const { data: items = [] } = useGetInventoryItems();
+type LineForm = { lineId: number; description: string; orderedQty: number; receivedQty: number; unitCost: number; productId: number | null };
+
+function ReceiveFromPoDialog({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const create = useCreateStockIn();
-  const [form, setForm] = useState<CreateStockInBody>({
-    itemId: 0,
-    qty: 0,
-    unitCost: 0,
-    sourceType: CreateStockInBodySourceType.manual,
-    notes: "",
+  const create = useCreateStockInFromPo();
+
+  // Pull POs that are eligible for receipt (approved, not yet fully received).
+  const { data: approvedPos = [] } = useGetPurchaseOrders({ status: "approved" });
+  const { data: receivedPos = [] } = useGetPurchaseOrders({ status: "received" });
+  const eligiblePos = useMemo(
+    () => [...approvedPos, ...receivedPos],
+    [approvedPos, receivedPos],
+  );
+
+  const [poId, setPoId] = useState<number | null>(null);
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<LineForm[]>([]);
+
+  const { data: poDetail } = useGetPurchaseOrder(poId ?? 0, {
+    query: { enabled: !!poId, queryKey: getGetPurchaseOrderQueryKey(poId ?? 0) },
   });
 
+  // When PO loads, initialise lines (default: receive full ordered qty).
+  React.useEffect(() => {
+    if (poDetail?.lineItems) {
+      setLines(
+        poDetail.lineItems
+          .filter((li) => li.productId != null)
+          .map((li) => ({
+            lineId: li.id,
+            description: li.description,
+            productId: li.productId ?? null,
+            orderedQty: parseFloat(String(li.qty)),
+            receivedQty: parseFloat(String(li.qty)),
+            unitCost: parseFloat(String(li.unitPrice)),
+          })),
+      );
+    } else {
+      setLines([]);
+    }
+  }, [poDetail?.id]);
+
+  const updateLine = (idx: number, patch: Partial<LineForm>) => {
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  };
+
   const submit = async () => {
-    if (!form.itemId || form.qty <= 0 || form.unitCost < 0) {
-      toast({ title: "Invalid entry", description: "Pick an item, enter qty and unit cost.", variant: "destructive" });
+    if (!poId) {
+      toast({ title: "Pick a PO", variant: "destructive" });
+      return;
+    }
+    const payloadLines = lines
+      .filter((l) => l.receivedQty > 0 || l.receivedQty < l.orderedQty)
+      .map((l) => ({
+        purchaseOrderLineId: l.lineId,
+        receivedQty: l.receivedQty,
+        unitCost: l.unitCost,
+      }));
+    if (payloadLines.length === 0) {
+      toast({ title: "Nothing to receive", description: "Enter received qty for at least one line.", variant: "destructive" });
       return;
     }
     await create.mutateAsync(
-      { data: form },
+      { data: { purchaseOrderId: poId, lines: payloadLines, notes: notes || undefined } },
       {
-        onSuccess: () => {
-          toast({ title: "Stock In recorded" });
+        onSuccess: (r) => {
+          toast({
+            title: "Stores In recorded",
+            description: `${r.movementsCreated} line(s) posted${r.shortLines > 0 ? `, ${r.shortLines} short` : ""}.`,
+          });
           qc.invalidateQueries();
           onClose();
         },
@@ -154,43 +214,105 @@ function ManualStockInDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Manual Stock In</DialogTitle>
+          <DialogTitle>Receive Goods from PO</DialogTitle>
+          <DialogDescription>
+            Pick an approved PO, enter actual received qty per line. Shortages (received &lt; ordered) are tagged automatically.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <Label>Item</Label>
-            <Select value={form.itemId ? String(form.itemId) : ""} onValueChange={(v) => setForm({ ...form, itemId: Number(v) })}>
-              <SelectTrigger data-testid="select-stockin-item"><SelectValue placeholder="Pick an item…" /></SelectTrigger>
+            <Label>Purchase Order</Label>
+            <Select value={poId ? String(poId) : ""} onValueChange={(v) => setPoId(Number(v))}>
+              <SelectTrigger data-testid="select-receive-po">
+                <SelectValue placeholder={eligiblePos.length === 0 ? "No approved POs available" : "Pick a PO…"} />
+              </SelectTrigger>
               <SelectContent className="max-h-72">
-                {items.map((i) => (
-                  <SelectItem key={i.id} value={String(i.id)}>
-                    {i.itemCode ? `${i.itemCode} — ` : ""}{i.name}
+                {eligiblePos.map((po) => (
+                  <SelectItem key={po.id} value={String(po.id)}>
+                    {po.poNumber} — {po.supplierName} ({po.status})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Quantity</Label>
-              <Input type="number" min="0" step="0.01" value={form.qty} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} data-testid="input-stockin-qty" />
+          {lines.length > 0 && (
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Line</TableHead>
+                    <TableHead className="text-right">Ordered</TableHead>
+                    <TableHead className="text-right w-32">Received</TableHead>
+                    <TableHead className="text-right w-32">Unit Cost (₹)</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lines.map((l, i) => {
+                    const shortageQty = Math.max(0, l.orderedQty - l.receivedQty);
+                    const isShort = shortageQty > 0.0001;
+                    return (
+                      <TableRow key={l.lineId} data-testid={`row-receive-line-${l.lineId}`}>
+                        <TableCell className="text-sm">{l.description}</TableCell>
+                        <TableCell className="text-right text-sm">{l.orderedQty}</TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={l.receivedQty}
+                            onChange={(e) => updateLine(i, { receivedQty: Number(e.target.value) })}
+                            className="text-right"
+                            data-testid={`input-receive-qty-${l.lineId}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={l.unitCost}
+                            onChange={(e) => updateLine(i, { unitCost: Number(e.target.value) })}
+                            className="text-right"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isShort ? (
+                            <Badge variant="destructive">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Short {shortageQty}
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">OK</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
-            <div>
-              <Label>Unit Cost (₹)</Label>
-              <Input type="number" min="0" step="0.01" value={form.unitCost} onChange={(e) => setForm({ ...form, unitCost: Number(e.target.value) })} data-testid="input-stockin-cost" />
-            </div>
-          </div>
+          )}
+          {poId && lines.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              This PO has no line items linked to inventory products — nothing to receive.
+            </p>
+          )}
           <div>
             <Label>Notes</Label>
-            <Textarea value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={create.isPending} data-testid="button-stockin-submit">
-            Record Stock In
+          <Button
+            onClick={submit}
+            disabled={create.isPending || !poId || lines.length === 0}
+            data-testid="button-receive-submit"
+          >
+            Record Receipt
           </Button>
         </DialogFooter>
       </DialogContent>
