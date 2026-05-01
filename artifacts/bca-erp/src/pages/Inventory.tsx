@@ -43,8 +43,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { objectPathToUrl } from "@/lib/uploadFile";
 
 const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"];
-// Product Master CRUD is admin-only by spec.
-const ITEM_MGMT_ROLES = ["admin"];
+// Product Master CRUD is admin-tier only by spec (admin/director/cfo).
+const ITEM_MGMT_ROLES = ["admin", "director", "cfo"];
 const CATEGORIES = ["rawMaterial", "wip", "finishedGoods"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
   rawMaterial: "Raw Material",
@@ -567,7 +567,7 @@ export default function Inventory() {
         <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
-            <strong>Admin only.</strong> Product Master entries (create, edit, delete) can only be managed by an administrator. You can still view items, view ledgers, and record stock transactions if your role allows.
+            <strong>Admin-tier only.</strong> Product Master entries (create, edit, delete) can only be managed by Admin, Director, or CFO roles. You can still view items, view ledgers, and record stock transactions if your role allows.
           </div>
         </div>
       )}

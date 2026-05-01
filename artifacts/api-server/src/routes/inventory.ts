@@ -16,8 +16,8 @@ const inventoryRouter = Router();
 
 const VIEW_ROLES = ["stores", "manager", "director", "admin", "cfo", "purchase", "accounts", "production"] as const;
 const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"] as const;
-// Product Master CRUD is admin-only by spec.
-const ITEM_MGMT_ROLES = ["admin"] as const;
+// Product Master CRUD is admin-tier only by spec (admin/director/cfo).
+const ITEM_MGMT_ROLES = ["admin", "director", "cfo"] as const;
 // BOM management retains the broader manager-class privileges from before.
 const BOM_MGMT_ROLES = ["manager", "director", "admin", "cfo"] as const;
 
