@@ -790,14 +790,12 @@ function EditLeadDialog({
                   </FormItem>
                 )}
               />
-              <FormItem>
-                <FormLabel>Status</FormLabel>
+              <div className="space-y-2">
+                <Label>Status</Label>
                 <Select onValueChange={setLeadStatus} value={leadStatus}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {LEAD_STATUSES.map((s) => (
                       <SelectItem key={s} value={s}>
@@ -806,7 +804,7 @@ function EditLeadDialog({
                     ))}
                   </SelectContent>
                 </Select>
-              </FormItem>
+              </div>
               <FormField
                 control={form.control}
                 name="assignedToId"
