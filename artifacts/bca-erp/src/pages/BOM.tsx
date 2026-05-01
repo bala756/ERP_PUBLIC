@@ -33,10 +33,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Layers, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Layers, Plus, Trash2, ChevronDown, ChevronRight, ShieldAlert } from "lucide-react";
 
-const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"];
-const DELETE_ROLES = ["manager", "director", "admin", "cfo"];
+// BOM templates are master data (they drive component consumption and costing),
+// so create/update/delete is admin-tier only — same gating as Product Master.
+const BOM_MGMT_ROLES = ["admin", "director", "cfo"];
 
 type LineItemInput = {
   rawMaterialItemId: number;
@@ -251,10 +252,9 @@ function BomFormDialog({
   );
 }
 
-function BomRow({ bom, canWrite, canDelete, onEdit, onDelete }: {
+function BomRow({ bom, canManage, onEdit, onDelete }: {
   bom: BomTemplate;
-  canWrite: boolean;
-  canDelete: boolean;
+  canManage: boolean;
   onEdit: (b: BomTemplate) => void;
   onDelete: (b: BomTemplate) => void;
 }) {
@@ -278,13 +278,13 @@ function BomRow({ bom, canWrite, canDelete, onEdit, onDelete }: {
         <TableCell className="text-muted-foreground text-sm">{bom.lineItems.length} component(s)</TableCell>
         <TableCell>
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            {canWrite && (
-              <Button size="sm" variant="ghost" onClick={() => onEdit(bom)}>Edit</Button>
-            )}
-            {canDelete && (
-              <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => onDelete(bom)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
+            {canManage && (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => onEdit(bom)}>Edit</Button>
+                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => onDelete(bom)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
             )}
           </div>
         </TableCell>
@@ -362,8 +362,7 @@ export default function BOM() {
     },
   });
 
-  const canWrite = user && WRITE_ROLES.includes(user.role);
-  const canDelete = user && DELETE_ROLES.includes(user.role);
+  const canManageBom = !!(user && BOM_MGMT_ROLES.includes(user.role));
 
   return (
     <div className="space-y-6">
@@ -375,13 +374,22 @@ export default function BOM() {
             <p className="text-sm text-muted-foreground">Define component lists for finished goods</p>
           </div>
         </div>
-        {canWrite && (
+        {canManageBom && (
           <Button onClick={() => { setEditingBom(null); setFormOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
             New BOM
           </Button>
         )}
       </div>
+
+      {!canManageBom && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <strong>Admin-tier only.</strong> BOM templates (create, edit, delete) can only be managed by Admin, Director, or CFO roles, since they drive component consumption and product costing. You can still view BOMs.
+          </div>
+        </div>
+      )}
 
       <div className="rounded-md border bg-background">
         <Table>
@@ -415,8 +423,7 @@ export default function BOM() {
                 <BomRow
                   key={bom.id}
                   bom={bom}
-                  canWrite={!!canWrite}
-                  canDelete={!!canDelete}
+                  canManage={canManageBom}
                   onEdit={(b) => { setEditingBom(b); setFormOpen(true); }}
                   onDelete={(b) => setDeleteTarget(b)}
                 />

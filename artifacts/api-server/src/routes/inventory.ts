@@ -18,8 +18,9 @@ const VIEW_ROLES = ["stores", "manager", "director", "admin", "cfo", "purchase",
 const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"] as const;
 // Product Master CRUD is admin-tier only by spec (admin/director/cfo).
 const ITEM_MGMT_ROLES = ["admin", "director", "cfo"] as const;
-// BOM management retains the broader manager-class privileges from before.
-const BOM_MGMT_ROLES = ["manager", "director", "admin", "cfo"] as const;
+// BOM templates drive component consumption and costing, so they are treated
+// as master data and locked to the same admin tier as Product Master.
+const BOM_MGMT_ROLES = ["admin", "director", "cfo"] as const;
 
 const createItemSchema = z.object({
   itemCode: z.string().max(50).optional(),
@@ -567,7 +568,7 @@ inventoryRouter.get("/bom", requireRole(...VIEW_ROLES), async (req, res) => {
   })));
 });
 
-inventoryRouter.post("/bom", requireRole(...WRITE_ROLES), async (req, res) => {
+inventoryRouter.post("/bom", requireRole(...BOM_MGMT_ROLES), async (req, res) => {
   const parsed = createBomSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
 
@@ -680,7 +681,7 @@ inventoryRouter.get("/bom/:id", requireRole(...VIEW_ROLES), async (req, res) => 
   });
 });
 
-inventoryRouter.patch("/bom/:id", requireRole(...WRITE_ROLES), async (req, res) => {
+inventoryRouter.patch("/bom/:id", requireRole(...BOM_MGMT_ROLES), async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
