@@ -267,16 +267,11 @@ leadsRouter.patch(
       updateData.assignedToId !== before.assignedToId;
     if (isReassign) {
       const role = req.session.userRole ?? "";
-      const ALLOWED_REASSIGN = [
-        "admin",
-        "director",
-        "cfo",
-        "manager",
-      ];
+      const ALLOWED_REASSIGN = ["admin", "director", "cfo"];
       if (!ALLOWED_REASSIGN.includes(role)) {
         res
           .status(403)
-          .json({ error: "Only managers/directors/admins can reassign leads" });
+          .json({ error: "Only admins, directors, and the CFO can reassign leads" });
         return;
       }
     }
@@ -575,10 +570,28 @@ leadsRouter.post(
       })
       .returning();
 
+    const [leadBefore] = await db
+      .select({ status: leadsTable.status })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, parsed.data.leadId));
     await db
       .update(leadsTable)
       .set({ status: "proposalSent" })
       .where(eq(leadsTable.id, parsed.data.leadId));
+    if (leadBefore && leadBefore.status !== "proposalSent") {
+      await logLeadActivity({
+        leadId: parsed.data.leadId,
+        type: "statusChanged",
+        actorUserId: req.session.userId ?? null,
+        payload: {
+          from: leadBefore.status,
+          to: "proposalSent",
+          reason: "proposalCreated",
+          proposalId: proposal.id,
+          proposalNumber: proposal.proposalNumber,
+        },
+      });
+    }
 
     res.status(201).json(serializeProposal(proposal));
   },
@@ -633,10 +646,28 @@ leadsRouter.post(
       .where(eq(proposalsTable.id, id))
       .returning();
 
+    const [leadWonBefore] = await db
+      .select({ status: leadsTable.status })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, proposal.proposal.leadId));
     await db
       .update(leadsTable)
       .set({ status: "won" })
       .where(eq(leadsTable.id, proposal.proposal.leadId));
+    if (leadWonBefore && leadWonBefore.status !== "won") {
+      await logLeadActivity({
+        leadId: proposal.proposal.leadId,
+        type: "statusChanged",
+        actorUserId: req.session.userId ?? null,
+        payload: {
+          from: leadWonBefore.status,
+          to: "won",
+          reason: "proposalWon",
+          proposalId: id,
+          proposalNumber: proposal.proposal.proposalNumber,
+        },
+      });
+    }
 
     const existingWO = await db
       .select()
@@ -831,16 +862,29 @@ leadsRouter.patch(
       return;
     }
 
-    if (status === "won") {
+    if (status === "won" || status === "lost") {
+      const [leadStatusBefore] = await db
+        .select({ status: leadsTable.status })
+        .from(leadsTable)
+        .where(eq(leadsTable.id, updated.leadId));
       await db
         .update(leadsTable)
-        .set({ status: "won" })
+        .set({ status })
         .where(eq(leadsTable.id, updated.leadId));
-    } else if (status === "lost") {
-      await db
-        .update(leadsTable)
-        .set({ status: "lost" })
-        .where(eq(leadsTable.id, updated.leadId));
+      if (leadStatusBefore && leadStatusBefore.status !== status) {
+        await logLeadActivity({
+          leadId: updated.leadId,
+          type: "statusChanged",
+          actorUserId: req.session.userId ?? null,
+          payload: {
+            from: leadStatusBefore.status,
+            to: status,
+            reason: `proposal${status === "won" ? "Won" : "Lost"}`,
+            proposalId: updated.id,
+            proposalNumber: updated.proposalNumber,
+          },
+        });
+      }
     }
 
     res.json(serializeProposal(updated));

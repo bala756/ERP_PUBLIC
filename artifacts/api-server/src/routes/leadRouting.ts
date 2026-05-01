@@ -188,12 +188,21 @@ router.post(
       .values({
         name: parsed.data.name,
         salespersonId: parsed.data.salespersonId,
-        states: parsed.data.states as unknown as object,
-        productKeywords: parsed.data.productKeywords as unknown as object,
+        states: parsed.data.states,
+        productKeywords: parsed.data.productKeywords,
         priority: parsed.data.priority,
         isActive: parsed.data.isActive,
       })
       .returning();
+    req.log.info(
+      {
+        audit: "leadRoutingRule.created",
+        actorUserId: req.session.userId,
+        ruleId: rule.id,
+        rule,
+      },
+      "Lead routing rule created",
+    );
     res.status(201).json(rule);
   },
 );
@@ -212,23 +221,30 @@ router.patch(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
-    const updateData: Record<string, unknown> = { ...parsed.data };
-    if (parsed.data.states !== undefined) {
-      updateData.states = parsed.data.states as unknown as object;
-    }
-    if (parsed.data.productKeywords !== undefined) {
-      updateData.productKeywords =
-        parsed.data.productKeywords as unknown as object;
-    }
-    const [updated] = await db
-      .update(leadRoutingRulesTable)
-      .set(updateData)
-      .where(eq(leadRoutingRulesTable.id, id))
-      .returning();
-    if (!updated) {
+    const [before] = await db
+      .select()
+      .from(leadRoutingRulesTable)
+      .where(eq(leadRoutingRulesTable.id, id));
+    if (!before) {
       res.status(404).json({ error: "Rule not found" });
       return;
     }
+    const [updated] = await db
+      .update(leadRoutingRulesTable)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(leadRoutingRulesTable.id, id))
+      .returning();
+    req.log.info(
+      {
+        audit: "leadRoutingRule.updated",
+        actorUserId: req.session.userId,
+        ruleId: id,
+        before,
+        after: updated,
+        changes: parsed.data,
+      },
+      "Lead routing rule updated",
+    );
     res.json(updated);
   },
 );
@@ -242,6 +258,10 @@ router.delete(
       res.status(400).json({ error: "Invalid id" });
       return;
     }
+    const [before] = await db
+      .select()
+      .from(leadRoutingRulesTable)
+      .where(eq(leadRoutingRulesTable.id, id));
     const [deleted] = await db
       .delete(leadRoutingRulesTable)
       .where(eq(leadRoutingRulesTable.id, id))
@@ -250,6 +270,15 @@ router.delete(
       res.status(404).json({ error: "Rule not found" });
       return;
     }
+    req.log.info(
+      {
+        audit: "leadRoutingRule.deleted",
+        actorUserId: req.session.userId,
+        ruleId: id,
+        before,
+      },
+      "Lead routing rule deleted",
+    );
     res.json({ success: true });
   },
 );
@@ -259,7 +288,6 @@ router.delete(
 const updateIndiaMartSchema = z.object({
   enabled: z.boolean().optional(),
   intervalMinutes: z.number().int().min(5).max(1440).optional(),
-  apiKey: z.string().optional().nullable(),
   dedupeWindowDays: z.number().int().min(1).max(365).optional(),
 });
 
@@ -285,6 +313,14 @@ router.put(
       parsed.data,
       req.session.userId!,
     );
+    req.log.info(
+      {
+        audit: "integrationSettings.indiamart.updated",
+        actorUserId: req.session.userId,
+        changes: parsed.data,
+      },
+      "IndiaMart settings updated",
+    );
     res.json(updated);
   },
 );
@@ -294,6 +330,14 @@ router.post(
   requireRole(...ADMIN_ROLES),
   async (req, res) => {
     const result = await syncIndiaMartLeads(req.session.userId ?? null);
+    req.log.info(
+      {
+        audit: "integrationSettings.indiamart.syncManual",
+        actorUserId: req.session.userId,
+        result,
+      },
+      "IndiaMart manual sync triggered",
+    );
     if (result.status === "failure") {
       res.status(502).json(result);
       return;

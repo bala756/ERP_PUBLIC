@@ -181,7 +181,7 @@ export function LeadDetailDrawer({ lead, onClose }: LeadDetailDrawerProps) {
   });
 
   const canReassign =
-    user && ["admin", "director", "cfo", "manager"].includes(user.role);
+    user !== null && ["admin", "director", "cfo"].includes(user.role);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>

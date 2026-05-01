@@ -389,7 +389,6 @@ function IndiaMartTab() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [intervalMinutes, setIntervalMinutes] = useState<string>("");
   const [dedupeWindowDays, setDedupeWindowDays] = useState<string>("");
-  const [apiKey, setApiKey] = useState("");
 
   React.useEffect(() => {
     if (settings) {
@@ -409,7 +408,6 @@ function IndiaMartTab() {
     onSuccess: () => {
       toast({ title: "Settings saved" });
       qc.invalidateQueries({ queryKey: ["indiamart-settings"] });
-      setApiKey("");
     },
     onError: () =>
       toast({ variant: "destructive", title: "Failed to save settings" }),
@@ -428,11 +426,16 @@ function IndiaMartTab() {
       });
       qc.invalidateQueries({ queryKey: ["indiamart-settings"] });
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
+      const e = err as { error?: string | { message?: string } } | null;
+      const msg =
+        typeof e?.error === "string"
+          ? e.error
+          : e?.error?.message ?? "Check API key & connectivity.";
       toast({
         variant: "destructive",
         title: "Sync failed",
-        description: err?.error?.message || err?.error || "Check API key & connectivity.",
+        description: msg,
       });
       qc.invalidateQueries({ queryKey: ["indiamart-settings"] });
     },
@@ -474,9 +477,17 @@ function IndiaMartTab() {
           <Separator />
 
           <div>
-            <Label>CRM API Key {settings.hasKey && <Badge variant="outline" className="ml-2">configured</Badge>}</Label>
-            <Input type="password" placeholder={settings.hasKey ? "•••••••• (leave blank to keep)" : "Paste IndiaMart CRM key"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} data-testid="input-apikey"/>
-            <p className="text-xs text-muted-foreground mt-1">Stored server-side in the integration_settings table. Used for the v2 CRM Lead Manager endpoint.</p>
+            <Label>
+              CRM API Key{" "}
+              {settings.hasKey ? (
+                <Badge variant="outline" className="ml-2">configured</Badge>
+              ) : (
+                <Badge variant="destructive" className="ml-2">not configured</Badge>
+              )}
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              The IndiaMart CRM key is read from the <code>INDIAMART_API_KEY</code> Replit Secret. Add or rotate it from the Secrets pane in the workspace; the app reads it at request time.
+            </p>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -496,7 +507,6 @@ function IndiaMartTab() {
                   intervalMinutes: parseInt(intervalMinutes, 10),
                   dedupeWindowDays: parseInt(dedupeWindowDays, 10),
                 };
-                if (apiKey.trim()) body.apiKey = apiKey.trim();
                 saveMutation.mutate(body);
               }}
               disabled={saveMutation.isPending}

@@ -43,17 +43,34 @@ interface InternalSettings extends IndiaMartSettings {
   apiKey: string | null;
 }
 
+interface StoredSettings {
+  enabled?: boolean;
+  intervalMinutes?: number;
+  lastSyncAt?: string | null;
+  lastSyncStatus?: "success" | "failure" | null;
+  lastSyncMessage?: string | null;
+  lastSyncCount?: number | null;
+  totalImported?: number;
+  dedupeWindowDays?: number;
+}
+
+function getApiKeyFromEnv(): string | null {
+  const k = process.env.INDIAMART_API_KEY;
+  return k && k.trim() !== "" ? k.trim() : null;
+}
+
 async function loadInternalSettings(): Promise<InternalSettings> {
   const [row] = await db
     .select()
     .from(integrationSettingsTable)
     .where(eq(integrationSettingsTable.key, INDIA_MART_KEY));
-  const value = (row?.value as Partial<InternalSettings>) ?? {};
+  const value = (row?.value as StoredSettings | null) ?? {};
+  const apiKey = getApiKeyFromEnv();
   return {
     ...DEFAULT_SETTINGS,
-    apiKey: null,
     ...value,
-    hasKey: Boolean(value.apiKey),
+    apiKey,
+    hasKey: Boolean(apiKey),
   };
 }
 
@@ -75,7 +92,6 @@ export async function getIndiaMartSettings(): Promise<IndiaMartSettings> {
 export interface UpdateIndiaMartSettings {
   enabled?: boolean;
   intervalMinutes?: number;
-  apiKey?: string | null;
   dedupeWindowDays?: number;
 }
 
@@ -88,26 +104,30 @@ export async function updateIndiaMartSettings(
     ...current,
     enabled: patch.enabled ?? current.enabled,
     intervalMinutes: patch.intervalMinutes ?? current.intervalMinutes,
-    apiKey:
-      patch.apiKey === undefined
-        ? current.apiKey
-        : patch.apiKey === null || patch.apiKey === ""
-          ? null
-          : patch.apiKey,
     dedupeWindowDays: patch.dedupeWindowDays ?? current.dedupeWindowDays,
   };
-  next.hasKey = Boolean(next.apiKey);
+
+  const stored: StoredSettings = {
+    enabled: next.enabled,
+    intervalMinutes: next.intervalMinutes,
+    lastSyncAt: next.lastSyncAt,
+    lastSyncStatus: next.lastSyncStatus,
+    lastSyncMessage: next.lastSyncMessage,
+    lastSyncCount: next.lastSyncCount,
+    totalImported: next.totalImported,
+    dedupeWindowDays: next.dedupeWindowDays,
+  };
 
   await db
     .insert(integrationSettingsTable)
     .values({
       key: INDIA_MART_KEY,
-      value: next as unknown as object,
+      value: stored,
       updatedBy: actorUserId,
     })
     .onConflictDoUpdate({
       target: integrationSettingsTable.key,
-      set: { value: next as unknown as object, updatedBy: actorUserId },
+      set: { value: stored, updatedBy: actorUserId },
     });
 
   return {
@@ -131,23 +151,25 @@ async function recordSyncResult(
   },
 ): Promise<void> {
   const current = await loadInternalSettings();
-  const next: InternalSettings = {
-    ...current,
+  const stored: StoredSettings = {
+    enabled: current.enabled,
+    intervalMinutes: current.intervalMinutes,
     lastSyncAt: new Date().toISOString(),
     lastSyncStatus: result.status,
     lastSyncMessage: result.message,
     lastSyncCount: result.importedCount,
     totalImported: current.totalImported + result.importedCount,
+    dedupeWindowDays: current.dedupeWindowDays,
   };
   await db
     .insert(integrationSettingsTable)
     .values({
       key: INDIA_MART_KEY,
-      value: next as unknown as object,
+      value: stored,
     })
     .onConflictDoUpdate({
       target: integrationSettingsTable.key,
-      set: { value: next as unknown as object },
+      set: { value: stored },
     });
 }
 
