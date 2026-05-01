@@ -4063,16 +4063,35 @@ export const GetWorkOrderPnlResponse = zod.object({
   revenueOrderValue: zod.number(),
   costStoresOut: zod.number(),
   costSubcontract: zod.number(),
+  costSubcontractInFlight: zod
+    .number()
+    .describe(
+      "Vendor charges on subcontract jobs not yet received (committed but not capitalized into Stores Out)",
+    ),
+  costImportsInFlight: zod
+    .number()
+    .describe(
+      "Committed INR value of import jobs (PO linked to WO) not yet received",
+    ),
   costImportExpenses: zod.number(),
   directExpenses: zod.number(),
-  totalCost: zod.number(),
+  totalCost: zod
+    .number()
+    .describe(
+      "Capitalized COGS (Stores Out + import expenses + direct expenses)",
+    ),
+  projectExpense: zod
+    .number()
+    .describe(
+      "Forward-looking expense base = capitalized COGS + in-flight subcontract + in-flight imports + direct expenses",
+    ),
   margin: zod.number(),
   marginPercent: zod.number(),
   invoiceCount: zod.number(),
   storesOutCount: zod.number(),
   projectVsExpense: zod
     .number()
-    .describe("Order value minus total cost (positive = profit headroom)"),
+    .describe("Order value minus projectExpense (positive = profit headroom)"),
 });
 
 /**
@@ -4087,16 +4106,35 @@ export const GetWorkOrderPnlSummaryResponseItem = zod.object({
   revenueOrderValue: zod.number(),
   costStoresOut: zod.number(),
   costSubcontract: zod.number(),
+  costSubcontractInFlight: zod
+    .number()
+    .describe(
+      "Vendor charges on subcontract jobs not yet received (committed but not capitalized into Stores Out)",
+    ),
+  costImportsInFlight: zod
+    .number()
+    .describe(
+      "Committed INR value of import jobs (PO linked to WO) not yet received",
+    ),
   costImportExpenses: zod.number(),
   directExpenses: zod.number(),
-  totalCost: zod.number(),
+  totalCost: zod
+    .number()
+    .describe(
+      "Capitalized COGS (Stores Out + import expenses + direct expenses)",
+    ),
+  projectExpense: zod
+    .number()
+    .describe(
+      "Forward-looking expense base = capitalized COGS + in-flight subcontract + in-flight imports + direct expenses",
+    ),
   margin: zod.number(),
   marginPercent: zod.number(),
   invoiceCount: zod.number(),
   storesOutCount: zod.number(),
   projectVsExpense: zod
     .number()
-    .describe("Order value minus total cost (positive = profit headroom)"),
+    .describe("Order value minus projectExpense (positive = profit headroom)"),
 });
 export const GetWorkOrderPnlSummaryResponse = zod.array(
   GetWorkOrderPnlSummaryResponseItem,

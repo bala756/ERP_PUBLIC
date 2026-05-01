@@ -16,8 +16,10 @@ import {
   stockTransactionsTable,
   subcontractJobsTable,
   inventoryItemsTable,
+  importJobsTable,
+  importJobItemsTable,
 } from "@workspace/db";
-import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, or, ne, desc, sql, inArray, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { z } from "zod";
 import { logger } from "../lib/logger";
@@ -538,6 +540,57 @@ ordersRouter.get(
       .from(subcontractJobsTable)
       .groupBy(subcontractJobsTable.workOrderId);
 
+    // In-flight subcontract: sent out but not yet received → vendor
+    // charges committed but NOT yet capitalized into stores-out
+    // (those would already be in costStoresOut for received jobs).
+    const subInFlightRows = await db
+      .select({
+        workOrderId: subcontractJobsTable.workOrderId,
+        subCost:
+          sql<string>`COALESCE(SUM(${subcontractJobsTable.totalVendorCost}), 0)`.as(
+            "sub_cost",
+          ),
+      })
+      .from(subcontractJobsTable)
+      .where(eq(subcontractJobsTable.status, "sentOut"))
+      .groupBy(subcontractJobsTable.workOrderId);
+
+    // In-flight imports: PO linked to WO, import_job not yet received/closed.
+    // Per-job committed value = GREATEST(SUM(landed_cost_inr over its items),
+    // supplierInvoiceAmount × exchangeRate). Landed cost includes
+    // freight/duty/clearance once allocations have been run; supplier invoice
+    // value is the floor before allocation. We then sum per-job committed
+    // values up to the WO via the linked PO.
+    const impInFlightRes = await db.execute<{
+      work_order_id: number | null;
+      imp_cost: string;
+    }>(sql`
+      WITH job_committed AS (
+        SELECT
+          ij.id AS import_job_id,
+          po.work_order_id AS work_order_id,
+          GREATEST(
+            COALESCE((
+              SELECT SUM(iji.landed_cost_inr)
+              FROM ${importJobItemsTable} iji
+              WHERE iji.import_job_id = ij.id
+            ), 0),
+            ij.supplier_invoice_amount * ij.exchange_rate
+          ) AS committed
+        FROM ${importJobsTable} ij
+        INNER JOIN ${purchaseOrdersTable} po ON po.id = ij.purchase_order_id
+        WHERE ij.status NOT IN ('received', 'closed', 'cancelled')
+      )
+      SELECT work_order_id, COALESCE(SUM(committed), 0)::text AS imp_cost
+      FROM job_committed
+      WHERE work_order_id IS NOT NULL
+      GROUP BY work_order_id
+    `);
+    const impInFlightRows = impInFlightRes.rows as Array<{
+      work_order_id: number | null;
+      imp_cost: string;
+    }>;
+
     const revMap = new Map<number, { revenue: number; invoiceCount: number }>();
     for (const r of revRows) {
       if (r.workOrderId !== null)
@@ -557,6 +610,16 @@ ordersRouter.get(
     const subMap = new Map<number, number>();
     for (const r of subRows) {
       if (r.workOrderId !== null) subMap.set(r.workOrderId, parseFloat(r.subCost));
+    }
+    const subInFlightMap = new Map<number, number>();
+    for (const r of subInFlightRows) {
+      if (r.workOrderId !== null)
+        subInFlightMap.set(r.workOrderId, parseFloat(r.subCost));
+    }
+    const impInFlightMap = new Map<number, number>();
+    for (const r of impInFlightRows) {
+      if (r.work_order_id !== null)
+        impInFlightMap.set(r.work_order_id, parseFloat(r.imp_cost));
     }
 
     // P&L summary covers every WO so leadership can see zero-activity
@@ -581,9 +644,20 @@ ordersRouter.get(
       // stock_movements row, which then flows through Stores Out into
       // costStoresOut. Adding it again would double-count it.
       const costSubcontract = subMap.get(wo.id) ?? 0;
+      const costSubcontractInFlight = subInFlightMap.get(wo.id) ?? 0;
+      const costImportsInFlight = impInFlightMap.get(wo.id) ?? 0;
       const costImportExpenses = 0;
       const directExpenses = 0;
       const totalCost = costStoresOut + costImportExpenses + directExpenses;
+      // projectExpense = capitalized COGS + committed-but-not-yet-capitalized
+      // (in-flight subcontract vendor charges + in-flight import landed value).
+      // Received subcontract/imports already flow into costStoresOut so they
+      // are excluded here to avoid double-counting.
+      const projectExpense =
+        costStoresOut +
+        costSubcontractInFlight +
+        costImportsInFlight +
+        directExpenses;
       const margin = revenueInvoiced - totalCost;
       const marginPercent =
         revenueInvoiced > 0 ? (margin / revenueInvoiced) * 100 : 0;
@@ -596,14 +670,17 @@ ordersRouter.get(
         revenueOrderValue,
         costStoresOut,
         costSubcontract,
+        costSubcontractInFlight,
+        costImportsInFlight,
         costImportExpenses,
         directExpenses,
         totalCost,
+        projectExpense,
         margin,
         marginPercent,
         invoiceCount: rev?.invoiceCount ?? 0,
         storesOutCount: cogsEntry?.outCount ?? 0,
-        projectVsExpense: revenueOrderValue - totalCost,
+        projectVsExpense: revenueOrderValue - projectExpense,
       };
     });
 
@@ -1667,7 +1744,10 @@ ordersRouter.get(
     );
 
     const subRows = await db
-      .select({ totalVendorCost: subcontractJobsTable.totalVendorCost })
+      .select({
+        totalVendorCost: subcontractJobsTable.totalVendorCost,
+        status: subcontractJobsTable.status,
+      })
       .from(subcontractJobsTable)
       .where(eq(subcontractJobsTable.workOrderId, id));
     // Reported for visibility only — see summary endpoint above for why
@@ -1677,10 +1757,50 @@ ordersRouter.get(
       (sum, r) => sum + parseFloat(r.totalVendorCost),
       0,
     );
+    // In-flight = sentOut (not yet received → not yet capitalized via
+    // subcontract receipt stock_movements). Safe to add as committed expense.
+    const costSubcontractInFlight = subRows
+      .filter((r) => r.status === "sentOut")
+      .reduce((sum, r) => sum + parseFloat(r.totalVendorCost), 0);
+
+    // In-flight imports linked to this WO via PO. Per-job committed value =
+    // GREATEST(SUM(landed_cost_inr), supplier invoice × FX). Landed cost
+    // includes freight/duty/clearance once allocations are run; supplier
+    // invoice value is the floor before allocation. Received/closed imports
+    // flow through Stores Out via landed-cost stock_movements so they're
+    // excluded here.
+    const impInFlightRes = await db.execute<{ imp_cost: string }>(sql`
+      WITH job_committed AS (
+        SELECT
+          ij.id AS import_job_id,
+          GREATEST(
+            COALESCE((
+              SELECT SUM(iji.landed_cost_inr)
+              FROM ${importJobItemsTable} iji
+              WHERE iji.import_job_id = ij.id
+            ), 0),
+            ij.supplier_invoice_amount * ij.exchange_rate
+          ) AS committed
+        FROM ${importJobsTable} ij
+        INNER JOIN ${purchaseOrdersTable} po ON po.id = ij.purchase_order_id
+        WHERE po.work_order_id = ${id}
+          AND ij.status NOT IN ('received', 'closed', 'cancelled')
+      )
+      SELECT COALESCE(SUM(committed), 0)::text AS imp_cost FROM job_committed
+    `);
+    const impInFlightRowOne = impInFlightRes.rows[0] as
+      | { imp_cost: string }
+      | undefined;
+    const costImportsInFlight = parseFloat(impInFlightRowOne?.imp_cost ?? "0");
 
     const costImportExpenses = 0;
     const directExpenses = 0;
     const totalCost = costStoresOut + costImportExpenses + directExpenses;
+    const projectExpense =
+      costStoresOut +
+      costSubcontractInFlight +
+      costImportsInFlight +
+      directExpenses;
     const margin = revenueInvoiced - totalCost;
     const marginPercent =
       revenueInvoiced > 0 ? (margin / revenueInvoiced) * 100 : 0;
@@ -1694,14 +1814,17 @@ ordersRouter.get(
       revenueOrderValue,
       costStoresOut,
       costSubcontract,
+      costSubcontractInFlight,
+      costImportsInFlight,
       costImportExpenses,
       directExpenses,
       totalCost,
+      projectExpense,
       margin,
       marginPercent,
       invoiceCount: invoiceRows.length,
       storesOutCount: costRows.length,
-      projectVsExpense: revenueOrderValue - totalCost,
+      projectVsExpense: revenueOrderValue - projectExpense,
     });
   },
 );

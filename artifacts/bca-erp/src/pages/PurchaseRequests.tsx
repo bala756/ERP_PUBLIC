@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -61,6 +61,17 @@ export default function PurchaseRequests() {
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [woFilter, setWoFilter] = useState<string>("");
   const [openId, setOpenId] = useState<number | null>(null);
+
+  // Deep-link support: ?prId=<id> auto-opens that PR's detail dialog.
+  // Used by WO Release flow to navigate straight to the resulting PR.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const prIdStr = sp.get("prId");
+    if (prIdStr) {
+      const prId = parseInt(prIdStr, 10);
+      if (Number.isFinite(prId) && prId > 0) setOpenId(prId);
+    }
+  }, []);
 
   const params: { status?: PurchaseRequest["status"]; branch?: string; workOrderId?: number } = {};
   if (statusFilter !== "all") params.status = statusFilter as PurchaseRequest["status"];

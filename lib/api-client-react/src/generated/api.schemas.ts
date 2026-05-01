@@ -1855,14 +1855,21 @@ export interface WorkOrderPnl {
   revenueOrderValue: number;
   costStoresOut: number;
   costSubcontract: number;
+  /** Vendor charges on subcontract jobs not yet received (committed but not capitalized into Stores Out) */
+  costSubcontractInFlight: number;
+  /** Committed INR value of import jobs (PO linked to WO) not yet received */
+  costImportsInFlight: number;
   costImportExpenses: number;
   directExpenses: number;
+  /** Capitalized COGS (Stores Out + import expenses + direct expenses) */
   totalCost: number;
+  /** Forward-looking expense base = capitalized COGS + in-flight subcontract + in-flight imports + direct expenses */
+  projectExpense: number;
   margin: number;
   marginPercent: number;
   invoiceCount: number;
   storesOutCount: number;
-  /** Order value minus total cost (positive = profit headroom) */
+  /** Order value minus projectExpense (positive = profit headroom) */
   projectVsExpense: number;
 }
 

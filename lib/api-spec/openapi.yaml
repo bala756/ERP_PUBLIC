@@ -5821,12 +5821,22 @@ components:
           type: number
         costSubcontract:
           type: number
+        costSubcontractInFlight:
+          type: number
+          description: Vendor charges on subcontract jobs not yet received (committed but not capitalized into Stores Out)
+        costImportsInFlight:
+          type: number
+          description: Committed INR value of import jobs (PO linked to WO) not yet received
         costImportExpenses:
           type: number
         directExpenses:
           type: number
         totalCost:
           type: number
+          description: Capitalized COGS (Stores Out + import expenses + direct expenses)
+        projectExpense:
+          type: number
+          description: Forward-looking expense base = capitalized COGS + in-flight subcontract + in-flight imports + direct expenses
         margin:
           type: number
         marginPercent:
@@ -5837,7 +5847,7 @@ components:
           type: integer
         projectVsExpense:
           type: number
-          description: Order value minus total cost (positive = profit headroom)
+          description: Order value minus projectExpense (positive = profit headroom)
       required:
         - workOrderId
         - workOrderNumber
@@ -5847,9 +5857,12 @@ components:
         - revenueOrderValue
         - costStoresOut
         - costSubcontract
+        - costSubcontractInFlight
+        - costImportsInFlight
         - costImportExpenses
         - directExpenses
         - totalCost
+        - projectExpense
         - margin
         - marginPercent
         - invoiceCount

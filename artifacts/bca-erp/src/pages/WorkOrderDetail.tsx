@@ -254,7 +254,7 @@ export default function WorkOrderDetail() {
       onSuccess: (d) => {
         invalidate();
         toast({ title: `Released — Purchase Request ${d.prNumber} created` });
-        navigate(`/purchase-requests`);
+        navigate(`/purchase-requests?prId=${d.id}`);
       },
       onError: (e: Error) => toast({ title: e.message ?? "Failed to release WO", variant: "destructive" }),
     },
@@ -696,10 +696,28 @@ export default function WorkOrderDetail() {
                     ₹{pnl.revenueOrderValue.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                   </span>
                 </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground pl-2">• Stores Out (capitalized)</span>
+                  <span>
+                    ₹{pnl.costStoresOut.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground pl-2">• Subcontract in-flight</span>
+                  <span>
+                    ₹{pnl.costSubcontractInFlight.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground pl-2">• Imports in-flight</span>
+                  <span>
+                    ₹{pnl.costImportsInFlight.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Total Expense</span>
-                  <span className="font-semibold">
-                    ₹{pnl.totalCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  <span className="font-semibold" data-testid="text-project-expense">
+                    ₹{pnl.projectExpense.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <Separator />
@@ -714,7 +732,7 @@ export default function WorkOrderDetail() {
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Order value minus total tracked cost. Positive = profit headroom remaining.
+                  Order value minus capitalized COGS plus committed in-flight costs (subcontract + imports). Positive = profit headroom remaining.
                 </div>
               </div>
             </CardContent>
