@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
   useGetWorkOrder,
@@ -21,8 +21,10 @@ import {
   useCreateWorkOrderServiceEntry,
   useUpdateWorkOrderServiceEntry,
   useDeleteWorkOrderServiceEntry,
+  useGetInventoryItems,
   getGetWorkOrderQueryKey,
   getGetWorkOrderServiceEntriesQueryKey,
+  getGetInventoryItemsQueryKey,
   type WorkOrder,
   type WorkOrderItem,
   type PurchaseOrder,
@@ -225,6 +227,32 @@ export default function WorkOrderDetail() {
   const [createPOForItem, setCreatePOForItem] = useState<number | null>(null);
   const [poForm, setPOForm] = useState<POFormState>(defaultPOForm());
   const [showPOPicker, setShowPOPicker] = useState(false);
+
+  const poDialogOpen = createPOForItem !== null;
+  const { data: liveInventoryItems = [], refetch: refetchInventory } = useGetInventoryItems(
+    undefined,
+    {
+      query: {
+        enabled: poDialogOpen,
+        queryKey: getGetInventoryItemsQueryKey(),
+        staleTime: 0,
+      },
+    },
+  );
+
+  useEffect(() => {
+    if (poDialogOpen) {
+      refetchInventory();
+    }
+  }, [poDialogOpen, refetchInventory]);
+
+  const liveStockById = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const it of liveInventoryItems) {
+      m.set(it.id, it.stockBalance);
+    }
+    return m;
+  }, [liveInventoryItems]);
 
   const [subcontractForItem, setSubcontractForItem] = useState<number | null>(null);
   const [subForm, setSubForm] = useState({ vendorName: "", vendorContact: "", cost: "", description: "" });
@@ -1241,8 +1269,27 @@ export default function WorkOrderDetail() {
                   No products added. Click "Add Product" to pick from Product Master.
                 </div>
               )}
-              {poForm.lineItems.map((li, i) => (
-                <div key={i} className="border rounded-md p-2 space-y-2 bg-muted/30">
+              {poForm.lineItems.map((li, i) => {
+                const liveStock = li.productId !== undefined ? liveStockById.get(li.productId) : undefined;
+                const onHand = liveStock !== undefined ? liveStock : li.stockBalance;
+                const reqQty = parseFloat(li.qty);
+                const hasReqQty = !Number.isNaN(reqQty) && reqQty > 0;
+                const hasOnHand = onHand !== undefined;
+                const sufficient = hasOnHand && hasReqQty && (onHand as number) >= reqQty;
+                const shortfall = hasOnHand && hasReqQty && (onHand as number) < reqQty
+                  ? +(reqQty - (onHand as number)).toFixed(2)
+                  : 0;
+                return (
+                <div
+                  key={i}
+                  className={`border rounded-md p-2 space-y-2 ${
+                    sufficient
+                      ? "bg-green-50 border-green-300"
+                      : shortfall > 0
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-muted/30"
+                  }`}
+                >
                   <div className="flex items-start gap-2">
                     {li.productImageUrl ? (
                       <img src={objectPathToUrl(li.productImageUrl)} alt={li.productCode} className="w-12 h-12 rounded object-cover border bg-white shrink-0" />
@@ -1262,17 +1309,51 @@ export default function WorkOrderDetail() {
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
-                      {li.stockBalance !== undefined && (
-                        <div className={`text-xs mt-0.5 font-medium ${li.stockBalance > 0 ? "text-green-700" : "text-amber-600"}`}>
-                          On-hand: {li.stockBalance} {li.unit ?? ""}
-                          {li.stockBalance > 0 && parseFloat(li.qty) > 0 && li.stockBalance >= parseFloat(li.qty) && (
-                            <span className="ml-1 text-green-600">(sufficient stock)</span>
+                      {hasOnHand && (
+                        <div
+                          data-testid={`po-line-stock-${i}`}
+                          className={`text-xs mt-0.5 font-medium flex items-center flex-wrap gap-x-2 gap-y-0.5 ${
+                            sufficient
+                              ? "text-green-700"
+                              : (onHand as number) > 0
+                              ? "text-amber-700"
+                              : "text-red-600"
+                          }`}
+                        >
+                          <span>
+                            On hand: <span className="font-semibold">{onHand} {li.unit ?? "units"}</span>
+                          </span>
+                          {sufficient && (
+                            <Badge
+                              variant="outline"
+                              className="border-green-500 bg-green-100 text-green-800 gap-1 px-1.5 py-0 text-[10px] font-semibold"
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                              No PO needed — sufficient stock
+                            </Badge>
                           )}
-                          {li.stockBalance > 0 && parseFloat(li.qty) > 0 && li.stockBalance < parseFloat(li.qty) && (
-                            <span className="ml-1 text-amber-600">(shortfall: {(parseFloat(li.qty) - li.stockBalance).toFixed(2)})</span>
+                          {shortfall > 0 && (
+                            <>
+                              <span>
+                                Shortfall: <span className="font-semibold">{shortfall} {li.unit ?? ""}</span>
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 px-1.5 text-[10px] text-amber-700 hover:text-amber-800"
+                                onClick={() => setPOForm((p) => {
+                                  const ls = [...p.lineItems];
+                                  ls[i] = { ...ls[i], qty: String(shortfall) };
+                                  return { ...p, lineItems: ls };
+                                })}
+                              >
+                                Order shortfall only
+                              </Button>
+                            </>
                           )}
-                          {li.stockBalance === 0 && (
-                            <span className="ml-1 text-red-600">(no stock)</span>
+                          {(onHand as number) === 0 && hasReqQty && (
+                            <span className="text-red-600">(no stock — full order needed)</span>
                           )}
                         </div>
                       )}
@@ -1288,7 +1369,14 @@ export default function WorkOrderDetail() {
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <Label className="text-xs">Qty</Label>
-                      <Input type="number" min="0" step="0.01" value={li.qty} onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...p, lineItems: ls }; })} />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={li.qty}
+                        data-testid={`po-line-qty-${i}`}
+                        onChange={(e) => setPOForm((p) => { const ls = [...p.lineItems]; ls[i] = { ...ls[i], qty: e.target.value }; return { ...p, lineItems: ls }; })}
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Unit ₹</Label>
@@ -1300,7 +1388,8 @@ export default function WorkOrderDetail() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <ProductPicker
