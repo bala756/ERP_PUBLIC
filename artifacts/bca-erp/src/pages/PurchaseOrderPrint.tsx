@@ -1,10 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { useRoute } from "wouter";
-import { useGetPurchaseOrder } from "@workspace/api-client-react";
+import {
+  useGetPurchaseOrder,
+  useDirectorApprovePurchaseOrder,
+  useDirectorRejectPurchaseOrder,
+  getGetPurchaseOrderQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Printer, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { Printer, AlertTriangle, ShieldAlert, CheckCircle, XCircle } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "DRAFT",
@@ -12,13 +23,39 @@ const STATUS_LABELS: Record<string, string> = {
   pendingDirectorApproval: "PENDING DIRECTOR APPROVAL",
   approved: "APPROVED",
   received: "RECEIVED",
-  cancelled: "CANCELLED",
+  cancelled: "CANCELLED / REJECTED",
 };
+
+const DIRECTOR_ROLES = ["director", "admin"];
 
 export default function PurchaseOrderPrint() {
   const [, params] = useRoute("/purchase-orders/:id/print");
   const poId = params?.id ? parseInt(params.id, 10) : 0;
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
+
   const { data: po, isLoading } = useGetPurchaseOrder(poId);
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: getGetPurchaseOrderQueryKey(poId) });
+
+  const directorApprovePO = useDirectorApprovePurchaseOrder({
+    mutation: {
+      onSuccess: () => { invalidate(); toast({ title: "PO approved by director" }); },
+      onError: (err: Error) => toast({ title: err.message ?? "Failed to approve", variant: "destructive" }),
+    },
+  });
+
+  const directorRejectPO = useDirectorRejectPurchaseOrder({
+    mutation: {
+      onSuccess: () => { invalidate(); setRejectOpen(false); setRejectNote(""); toast({ title: "PO rejected by director" }); },
+      onError: () => toast({ title: "Failed to reject", variant: "destructive" }),
+    },
+  });
+
+  const canDirectorApprove = user && DIRECTOR_ROLES.includes(user.role);
 
   if (isLoading) {
     return (
@@ -56,11 +93,43 @@ export default function PurchaseOrderPrint() {
         </div>
 
         {isDirectorPending && (
-          <div className="print:hidden mb-4 flex items-center gap-2 bg-amber-50 border border-amber-300 rounded p-3 text-amber-700 text-sm">
-            <ShieldAlert className="h-4 w-4 shrink-0" />
-            This PO is awaiting Director approval before it can proceed.
+          <div className="print:hidden mb-4 flex items-center justify-between gap-3 bg-amber-50 border border-amber-300 rounded p-3">
+            <div className="flex items-center gap-2 text-amber-700 text-sm">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              This PO is awaiting Director approval before it can proceed.
+            </div>
+            {canDirectorApprove && (
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" variant="default" className="gap-1" disabled={directorApprovePO.isPending} onClick={() => directorApprovePO.mutate({ id: poId })}>
+                  <CheckCircle className="h-4 w-4" />
+                  Approve
+                </Button>
+                <Button size="sm" variant="destructive" className="gap-1" onClick={() => setRejectOpen(true)}>
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </Button>
+              </div>
+            )}
           </div>
         )}
+
+        <Dialog open={rejectOpen} onOpenChange={(o) => { if (!o) { setRejectOpen(false); setRejectNote(""); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Director Reject Purchase Order</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Rejection reason..." rows={3} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setRejectOpen(false); setRejectNote(""); }}>Cancel</Button>
+              <Button variant="destructive" disabled={directorRejectPO.isPending} onClick={() => directorRejectPO.mutate({ id: poId, data: { rejectionNote: rejectNote } })}>
+                {directorRejectPO.isPending ? "Rejecting..." : "Reject"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="border border-gray-300 rounded-sm p-8 print:border-0 print:p-0">
           <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
