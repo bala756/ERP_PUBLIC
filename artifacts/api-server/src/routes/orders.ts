@@ -1819,6 +1819,10 @@ ordersRouter.patch(
       res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
       return;
     }
+    if (Object.keys(parsed.data).length === 0) {
+      res.status(400).json({ error: "At least one field is required to update" });
+      return;
+    }
     const [updated] = await db
       .update(workOrderServiceEntriesTable)
       .set(parsed.data)

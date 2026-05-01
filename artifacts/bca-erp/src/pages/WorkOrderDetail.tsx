@@ -17,6 +17,7 @@ import {
   useGetWorkOrderPnl,
   useGetWorkOrderServiceEntries,
   useCreateWorkOrderServiceEntry,
+  useUpdateWorkOrderServiceEntry,
   useDeleteWorkOrderServiceEntry,
   getGetWorkOrderQueryKey,
   getGetWorkOrderServiceEntriesQueryKey,
@@ -296,24 +297,45 @@ export default function WorkOrderDetail() {
   });
 
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [editingServiceEntryId, setEditingServiceEntryId] = useState<number | null>(null);
   const [serviceForm, setServiceForm] = useState({
     entryDate: "",
     technicianName: "",
     description: "",
   });
 
+  const invalidateServiceEntries = () => {
+    if (woId) {
+      qc.invalidateQueries({ queryKey: getGetWorkOrderServiceEntriesQueryKey(woId) });
+      qc.invalidateQueries({ queryKey: getGetWorkOrderQueryKey(woId) });
+    }
+  };
+
+  const closeServiceDialog = () => {
+    setServiceDialogOpen(false);
+    setEditingServiceEntryId(null);
+    setServiceForm({ entryDate: "", technicianName: "", description: "" });
+  };
+
   const createServiceEntry = useCreateWorkOrderServiceEntry({
     mutation: {
       onSuccess: () => {
         toast({ title: "Service entry added" });
-        if (woId) {
-          qc.invalidateQueries({ queryKey: getGetWorkOrderServiceEntriesQueryKey(woId) });
-          qc.invalidateQueries({ queryKey: getGetWorkOrderQueryKey(woId) });
-        }
-        setServiceDialogOpen(false);
-        setServiceForm({ entryDate: "", technicianName: "", description: "" });
+        invalidateServiceEntries();
+        closeServiceDialog();
       },
       onError: (e) => toast({ title: "Failed to add", description: String(e), variant: "destructive" }),
+    },
+  });
+
+  const updateServiceEntry = useUpdateWorkOrderServiceEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Service entry updated" });
+        invalidateServiceEntries();
+        closeServiceDialog();
+      },
+      onError: (e) => toast({ title: "Failed to update", description: String(e), variant: "destructive" }),
     },
   });
 
@@ -321,10 +343,7 @@ export default function WorkOrderDetail() {
     mutation: {
       onSuccess: () => {
         toast({ title: "Service entry removed" });
-        if (woId) {
-          qc.invalidateQueries({ queryKey: getGetWorkOrderServiceEntriesQueryKey(woId) });
-          qc.invalidateQueries({ queryKey: getGetWorkOrderQueryKey(woId) });
-        }
+        invalidateServiceEntries();
       },
       onError: (e) => toast({ title: "Failed to remove", description: String(e), variant: "destructive" }),
     },
@@ -715,6 +734,7 @@ export default function WorkOrderDetail() {
               size="sm"
               variant="outline"
               onClick={() => {
+                setEditingServiceEntryId(null);
                 setServiceForm({
                   entryDate: new Date().toISOString().slice(0, 10),
                   technicianName: "",
@@ -756,18 +776,36 @@ export default function WorkOrderDetail() {
                     <div className="text-sm mt-1 whitespace-pre-line">{se.description}</div>
                   </div>
                   {canWrite && woId && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        if (confirm("Delete this service entry?")) {
-                          deleteServiceEntry.mutate({ id: woId, entryId: se.id });
-                        }
-                      }}
-                      data-testid={`button-delete-service-entry-${se.id}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingServiceEntryId(se.id);
+                          setServiceForm({
+                            entryDate: se.entryDate ? se.entryDate.slice(0, 10) : "",
+                            technicianName: se.technicianName ?? "",
+                            description: se.description ?? "",
+                          });
+                          setServiceDialogOpen(true);
+                        }}
+                        data-testid={`button-edit-service-entry-${se.id}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm("Delete this service entry?")) {
+                            deleteServiceEntry.mutate({ id: woId, entryId: se.id });
+                          }
+                        }}
+                        data-testid={`button-delete-service-entry-${se.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1430,10 +1468,12 @@ export default function WorkOrderDetail() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
+      <Dialog open={serviceDialogOpen} onOpenChange={(o) => { if (!o) closeServiceDialog(); else setServiceDialogOpen(true); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add After-sales Service Entry</DialogTitle>
+            <DialogTitle>
+              {editingServiceEntryId !== null ? "Edit Service Entry" : "Add After-sales Service Entry"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -1466,10 +1506,11 @@ export default function WorkOrderDetail() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setServiceDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={closeServiceDialog}>Cancel</Button>
             <Button
               disabled={
                 createServiceEntry.isPending ||
+                updateServiceEntry.isPending ||
                 !woId ||
                 !serviceForm.entryDate ||
                 !serviceForm.technicianName.trim() ||
@@ -1477,18 +1518,31 @@ export default function WorkOrderDetail() {
               }
               onClick={() => {
                 if (!woId) return;
-                createServiceEntry.mutate({
-                  id: woId,
-                  data: {
-                    entryDate: serviceForm.entryDate,
-                    technicianName: serviceForm.technicianName.trim(),
-                    description: serviceForm.description.trim(),
-                  },
-                });
+                const payload = {
+                  entryDate: serviceForm.entryDate,
+                  technicianName: serviceForm.technicianName.trim(),
+                  description: serviceForm.description.trim(),
+                };
+                if (editingServiceEntryId !== null) {
+                  updateServiceEntry.mutate({
+                    id: woId,
+                    entryId: editingServiceEntryId,
+                    data: payload,
+                  });
+                } else {
+                  createServiceEntry.mutate({
+                    id: woId,
+                    data: payload,
+                  });
+                }
               }}
               data-testid="button-save-service-entry"
             >
-              {createServiceEntry.isPending ? "Saving..." : "Save Entry"}
+              {createServiceEntry.isPending || updateServiceEntry.isPending
+                ? "Saving..."
+                : editingServiceEntryId !== null
+                ? "Save Changes"
+                : "Save Entry"}
             </Button>
           </DialogFooter>
         </DialogContent>
