@@ -69,7 +69,14 @@ function classifyBranch(
   workflowType: string | null | undefined,
 ): "manufactured" | "raw" | "imported" {
   if (workflowType === "imported") return "imported";
-  if (category === "finishedGoods" || category === "wip") return "manufactured";
+  // Inventory category enum uses singular forms; accept both common spellings
+  // to be defensive against historical data.
+  if (
+    category === "finishedGood" ||
+    category === "finishedGoods" ||
+    category === "wip"
+  )
+    return "manufactured";
   return "raw";
 }
 
@@ -231,12 +238,29 @@ purchaseRequestsRouter.post(
           item.workflowType ?? null,
         );
 
-        // Manufactured + has BOM → explode to raw materials, branch=raw for each
-        if (branch === "manufactured" && product?.bomTemplateId) {
+        // Manufactured + has BOM → explode to raw materials, branch=raw for each.
+        // BOM lookup: prefer the explicit inventory_items.bom_template_id column,
+        // but fall back to the active bom_templates row keyed by finished_item_id
+        // (the canonical link), since older items may not have the FK populated.
+        let bomId: number | null = product?.bomTemplateId ?? null;
+        if (!bomId && product) {
+          const [bomRow] = await db
+            .select()
+            .from(bomTemplatesTable)
+            .where(
+              and(
+                eq(bomTemplatesTable.finishedItemId, product.id),
+                eq(bomTemplatesTable.isActive, true),
+              ),
+            );
+          bomId = bomRow?.id ?? null;
+        }
+
+        if (branch === "manufactured" && bomId && product) {
           const lines = await db
             .select()
             .from(bomLineItemsTable)
-            .where(eq(bomLineItemsTable.bomId, product.bomTemplateId));
+            .where(eq(bomLineItemsTable.bomId, bomId));
 
           // Also keep an entry for the manufactured FG itself so it can be tracked
           aggregated.push({
@@ -280,10 +304,14 @@ purchaseRequestsRouter.post(
         }
       }
 
-      // Coalesce by (productId, branch, workOrderItemId)
+      // Coalesce by (productId, branch) so on-hand is subtracted ONCE per
+      // product. Merging by workOrderItemId would let the same on-hand balance
+      // satisfy multiple WO-item rows and materially under-procure.
+      // workOrderItemId on the merged row points to the first contributing
+      // WO item (informational link only).
       const merged = new Map<string, Aggregate>();
       for (const a of aggregated) {
-        const key = `${a.productId ?? "null"}|${a.branch}|${a.workOrderItemId}`;
+        const key = `${a.productId ?? `desc:${a.description}`}|${a.branch}`;
         const prev = merged.get(key);
         if (prev) {
           prev.requiredQty += a.requiredQty;
@@ -643,16 +671,6 @@ purchaseRequestsRouter.post(
         continue;
       }
 
-      // Manufactured FG with BOM stays "pending" — handled in-house via subcontract
-      // or production from raw materials (which are the other PR rows)
-      if (it.branch === "manufactured") {
-        await db
-          .update(purchaseRequestItemsTable)
-          .set({ status: "pending" })
-          .where(eq(purchaseRequestItemsTable.id, it.id));
-        continue;
-      }
-
       const vendor = vendorMap[String(it.id)] ?? "TBD";
       const key = `${it.branch}|${vendor}`;
       const existingGroup = groups.get(key);
@@ -664,7 +682,12 @@ purchaseRequestsRouter.post(
     }
 
     for (const [, group] of groups) {
-      if (group.branch === "raw") {
+      if (group.branch === "raw" || group.branch === "manufactured") {
+        // Both raw materials and manufactured FGs follow PR → PO → Stores In.
+        // Manufactured FGs are procured from a contractor / in-house production
+        // unit and received into stores via the existing PO receive flow. The
+        // PO type column reuses 'rawMaterial' since the underlying receive →
+        // stock_movements path is identical (cost-stamped landed cost).
         // Create a PO of type rawMaterial
         const poNumberRes = await db.execute<{ nextval: string }>(
           sql`SELECT nextval('po_seq')`,

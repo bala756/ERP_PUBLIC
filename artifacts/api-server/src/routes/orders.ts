@@ -15,7 +15,7 @@ import {
   subcontractJobsTable,
   inventoryItemsTable,
 } from "@workspace/db";
-import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { z } from "zod";
 import { logger } from "../lib/logger";
@@ -24,6 +24,9 @@ import { generateInvoiceNumber, calcGst } from "../lib/invoiceHelpers";
 const ordersRouter = Router();
 
 const VIEW_ROLES = ["sales", "manager", "director", "admin", "cfo", "purchase", "stores", "accounts"] as const;
+// Per-WO Profit & Loss exposes financial margin data and must be tighter
+// than general view access. Only finance/leadership roles can see it.
+const PNL_ROLES = ["manager", "director", "admin", "cfo", "accounts"] as const;
 const PO_CREATE_ROLES = ["purchase", "manager", "director", "admin", "cfo"] as const;
 const APPROVE_ROLES = ["stores", "manager", "director", "admin", "cfo"] as const;
 const STOCK_ROLES = ["stores", "manager", "director", "admin"] as const;
@@ -430,7 +433,7 @@ ordersRouter.get("/work-orders", requireRole(...VIEW_ROLES), async (req, res) =>
 // ─── GET /work-orders/pnl-summary ─────────────────────────────────────────────
 ordersRouter.get(
   "/work-orders/pnl-summary",
-  requireRole(...VIEW_ROLES),
+  requireRole(...PNL_ROLES),
   async (_req, res) => {
     // Revenue per WO
     const revRows = await db
@@ -453,7 +456,13 @@ ordersRouter.get(
         outCount: sql<string>`COUNT(*)`.as("out_count"),
       })
       .from(stockMovementsTable)
-      .where(eq(stockMovementsTable.movementType, "out"))
+      .where(
+        and(
+          eq(stockMovementsTable.movementType, "out"),
+          // Exclude transfers to subcontractors — those are not WO COGS
+          ne(stockMovementsTable.sourceType, "subcontractIssue"),
+        ),
+      )
       .groupBy(stockMovementsTable.workOrderId);
 
     const subRows = await db
@@ -1334,7 +1343,8 @@ ordersRouter.post(
       return;
     }
 
-    // Group stores-out movements by itemId
+    // Group stores-out movements by itemId. Exclude subcontract transfers —
+    // those are not customer-billable issues, just material loans to vendors.
     const movements = await db
       .select()
       .from(stockMovementsTable)
@@ -1342,6 +1352,7 @@ ordersRouter.post(
         and(
           eq(stockMovementsTable.workOrderId, id),
           eq(stockMovementsTable.movementType, "out"),
+          ne(stockMovementsTable.sourceType, "subcontractIssue"),
         ),
       );
     if (movements.length === 0) {
@@ -1493,7 +1504,7 @@ ordersRouter.post(
 // ─── GET /work-orders/:id/pnl ────────────────────────────────────────────────
 ordersRouter.get(
   "/work-orders/:id/pnl",
-  requireRole(...VIEW_ROLES),
+  requireRole(...PNL_ROLES),
   async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     if (isNaN(id)) {
@@ -1529,6 +1540,9 @@ ordersRouter.get(
         and(
           eq(stockMovementsTable.workOrderId, id),
           eq(stockMovementsTable.movementType, "out"),
+          // Subcontract transfers are not WO COGS (they go out and the
+          // received finished goods come back in via subcontractIn)
+          ne(stockMovementsTable.sourceType, "subcontractIssue"),
         ),
       );
     const costStoresOut = costRows.reduce(
