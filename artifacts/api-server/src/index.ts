@@ -25,6 +25,8 @@ async function ensureSequences() {
     await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS work_order_seq START 1`);
     await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS po_seq START 1`);
     await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS import_job_seq START 1`);
+    await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS pr_seq START 1`);
+    await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS subcontract_job_seq START 1`);
     logger.info("Ensured numbering sequences exist");
   } catch (err) {
     logger.error({ err }, "Failed to ensure numbering sequences");

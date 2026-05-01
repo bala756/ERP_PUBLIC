@@ -13,6 +13,9 @@ import importsRouter from "./imports";
 import leadRoutingRouter from "./leadRouting";
 import storageRouter from "./storage";
 import appSettingsRouter from "./appSettings";
+import purchaseRequestsRouter from "./purchaseRequests";
+import stockMovementsRouter from "./stockMovements";
+import subcontractJobsRouter from "./subcontractJobs";
 
 const router: IRouter = Router();
 
@@ -30,5 +33,8 @@ router.use(importsRouter);
 router.use(leadRoutingRouter);
 router.use(storageRouter);
 router.use(appSettingsRouter);
+router.use(purchaseRequestsRouter);
+router.use(stockMovementsRouter);
+router.use(subcontractJobsRouter);
 
 export default router;

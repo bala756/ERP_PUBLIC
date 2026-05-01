@@ -34,6 +34,11 @@ import GSTSummaryPage from "@/pages/GSTSummary";
 import ImportJobs from "@/pages/ImportJobs";
 import ImportJobDetail from "@/pages/ImportJobDetail";
 import LeadRouting from "@/pages/LeadRouting";
+import PurchaseRequests from "@/pages/PurchaseRequests";
+import StoresIn from "@/pages/StoresIn";
+import StoresOut from "@/pages/StoresOut";
+import SubcontractJobs from "@/pages/SubcontractJobs";
+import JobProfitability from "@/pages/JobProfitability";
 import {
   ServiceOrders,
   Approvals,
@@ -92,7 +97,12 @@ function Router() {
       <Route path="/purchase-orders"><ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute></Route>
       <Route path="/imports"><ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute></Route>
       <Route path="/imports/:id"><ProtectedRoute><Layout><ImportJobDetail /></Layout></ProtectedRoute></Route>
+      <Route path="/purchase-requests"><ProtectedRoute><Layout><PurchaseRequests /></Layout></ProtectedRoute></Route>
+      <Route path="/subcontract-jobs"><ProtectedRoute><Layout><SubcontractJobs /></Layout></ProtectedRoute></Route>
       <Route path="/inventory"><ProtectedRoute><Layout><Inventory /></Layout></ProtectedRoute></Route>
+      <Route path="/stores-in"><ProtectedRoute><Layout><StoresIn /></Layout></ProtectedRoute></Route>
+      <Route path="/stores-out"><ProtectedRoute><Layout><StoresOut /></Layout></ProtectedRoute></Route>
+      <Route path="/job-profitability"><ProtectedRoute><Layout><JobProfitability /></Layout></ProtectedRoute></Route>
       <Route path="/inventory/:id/ledger"><ProtectedRoute><Layout><InventoryLedger /></Layout></ProtectedRoute></Route>
       <Route path="/bom"><ProtectedRoute><Layout><BOM /></Layout></ProtectedRoute></Route>
       <Route path="/employees"><ProtectedRoute><Layout><EmployeeDirectory /></Layout></ProtectedRoute></Route>

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useGetInventoryItems,
+  useReceiveImportJobToStores,
   type InventoryItem,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -241,6 +242,17 @@ export default function ImportJobDetail() {
     },
   });
 
+  const receiveToStores = useReceiveImportJobToStores({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Received & posted to Stores", description: "Landed cost stamped per item" });
+        qc.invalidateQueries();
+      },
+      onError: (e: Error) =>
+        toast({ title: "Receive failed", description: e.message, variant: "destructive" }),
+    },
+  });
+
   const deleteJob = useMutation({
     mutationFn: () =>
       customFetch(`/api/import-jobs/${id}`, { method: "DELETE" }),
@@ -396,6 +408,16 @@ export default function ImportJobDetail() {
                 />
                 Recalculate
               </Button>
+              {job.status !== "received" && (
+                <Button
+                  variant="default"
+                  onClick={() => receiveToStores.mutate({ id: Number(id) })}
+                  disabled={receiveToStores.isPending}
+                  data-testid="button-receive-import"
+                >
+                  Mark Received → Post to Stores
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

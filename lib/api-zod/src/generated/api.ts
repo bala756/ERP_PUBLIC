@@ -3828,3 +3828,606 @@ export const UpdateAppSettingsResponse = zod.object({
   proposalTermsAndConditions: zod.string().nullish(),
   updatedAt: zod.string(),
 });
+
+/**
+ * @summary Release a work order — explodes BOM into a Purchase Request
+ */
+export const ReleaseWorkOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get profit / loss breakdown for a work order
+ */
+export const GetWorkOrderPnlParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetWorkOrderPnlResponse = zod.object({
+  workOrderId: zod.number(),
+  workOrderNumber: zod.string(),
+  customerName: zod.string(),
+  status: zod.string(),
+  revenueInvoiced: zod.number(),
+  revenueOrderValue: zod.number(),
+  costStoresOut: zod.number(),
+  costSubcontract: zod.number(),
+  costImportExpenses: zod.number(),
+  directExpenses: zod.number(),
+  totalCost: zod.number(),
+  margin: zod.number(),
+  marginPercent: zod.number(),
+  invoiceCount: zod.number(),
+  storesOutCount: zod.number(),
+});
+
+/**
+ * @summary Profit / loss across all work orders
+ */
+export const GetWorkOrderPnlSummaryResponseItem = zod.object({
+  workOrderId: zod.number(),
+  workOrderNumber: zod.string(),
+  customerName: zod.string(),
+  status: zod.string(),
+  revenueInvoiced: zod.number(),
+  revenueOrderValue: zod.number(),
+  costStoresOut: zod.number(),
+  costSubcontract: zod.number(),
+  costImportExpenses: zod.number(),
+  directExpenses: zod.number(),
+  totalCost: zod.number(),
+  margin: zod.number(),
+  marginPercent: zod.number(),
+  invoiceCount: zod.number(),
+  storesOutCount: zod.number(),
+});
+export const GetWorkOrderPnlSummaryResponse = zod.array(
+  GetWorkOrderPnlSummaryResponseItem,
+);
+
+/**
+ * @summary Generate a GST invoice from cost-stamped Stores Out movements for a WO
+ */
+export const GenerateInvoiceFromStoresParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List purchase requests
+ */
+export const GetPurchaseRequestsQueryParams = zod.object({
+  workOrderId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+  branch: zod.coerce.string().optional(),
+});
+
+export const GetPurchaseRequestsResponseItem = zod.object({
+  id: zod.number(),
+  prNumber: zod.string(),
+  workOrderId: zod.number(),
+  workOrderNumber: zod.string().nullish(),
+  woNumber: zod.string().nullish(),
+  customerName: zod.string().nullish(),
+  status: zod.enum(["proposed", "approved", "rejected", "cancelled"]),
+  notes: zod.string().nullish(),
+  approvedById: zod.number().nullish(),
+  approvedByName: zod.string().nullish(),
+  approvedAt: zod.string().nullish(),
+  createdById: zod.number().nullish(),
+  createdByName: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+  itemCount: zod.number(),
+  totalEstimatedValue: zod.number(),
+});
+export const GetPurchaseRequestsResponse = zod.array(
+  GetPurchaseRequestsResponseItem,
+);
+
+/**
+ * @summary Get a purchase request with items
+ */
+export const GetPurchaseRequestParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetPurchaseRequestResponse = zod
+  .object({
+    id: zod.number(),
+    prNumber: zod.string(),
+    workOrderId: zod.number(),
+    workOrderNumber: zod.string().nullish(),
+    woNumber: zod.string().nullish(),
+    customerName: zod.string().nullish(),
+    status: zod.enum(["proposed", "approved", "rejected", "cancelled"]),
+    notes: zod.string().nullish(),
+    approvedById: zod.number().nullish(),
+    approvedByName: zod.string().nullish(),
+    approvedAt: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    createdByName: zod.string().nullish(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+    itemCount: zod.number(),
+    totalEstimatedValue: zod.number(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          purchaseRequestId: zod.number(),
+          workOrderItemId: zod.number().nullish(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          branch: zod.enum(["manufactured", "raw", "imported"]),
+          description: zod.string(),
+          unit: zod.string().nullish(),
+          requiredQty: zod.number(),
+          onHandQty: zod.number(),
+          shortfallQty: zod.number(),
+          estimatedUnitCost: zod.number(),
+          status: zod.enum([
+            "pending",
+            "issuedFromStock",
+            "convertedToPo",
+            "convertedToImport",
+            "cancelled",
+          ]),
+          purchaseOrderId: zod.number().nullish(),
+          purchaseOrderNumber: zod.string().nullish(),
+          importJobId: zod.number().nullish(),
+          importJobNumber: zod.string().nullish(),
+          notes: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Update PR header notes or item quantities
+ */
+export const UpdatePurchaseRequestParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdatePurchaseRequestBody = zod.object({
+  notes: zod.string().nullish(),
+  items: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        shortfallQty: zod.number().optional(),
+        branch: zod.enum(["manufactured", "raw", "imported"]).optional(),
+        estimatedUnitCost: zod.number().optional(),
+        notes: zod.string().nullish(),
+      }),
+    )
+    .optional(),
+});
+
+export const UpdatePurchaseRequestResponse = zod
+  .object({
+    id: zod.number(),
+    prNumber: zod.string(),
+    workOrderId: zod.number(),
+    workOrderNumber: zod.string().nullish(),
+    woNumber: zod.string().nullish(),
+    customerName: zod.string().nullish(),
+    status: zod.enum(["proposed", "approved", "rejected", "cancelled"]),
+    notes: zod.string().nullish(),
+    approvedById: zod.number().nullish(),
+    approvedByName: zod.string().nullish(),
+    approvedAt: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    createdByName: zod.string().nullish(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+    itemCount: zod.number(),
+    totalEstimatedValue: zod.number(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          purchaseRequestId: zod.number(),
+          workOrderItemId: zod.number().nullish(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          branch: zod.enum(["manufactured", "raw", "imported"]),
+          description: zod.string(),
+          unit: zod.string().nullish(),
+          requiredQty: zod.number(),
+          onHandQty: zod.number(),
+          shortfallQty: zod.number(),
+          estimatedUnitCost: zod.number(),
+          status: zod.enum([
+            "pending",
+            "issuedFromStock",
+            "convertedToPo",
+            "convertedToImport",
+            "cancelled",
+          ]),
+          purchaseOrderId: zod.number().nullish(),
+          purchaseOrderNumber: zod.string().nullish(),
+          importJobId: zod.number().nullish(),
+          importJobNumber: zod.string().nullish(),
+          notes: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Approve a PR — creates POs (manufactured + raw) and Import Jobs (imported)
+ */
+export const ApprovePurchaseRequestParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ApprovePurchaseRequestBody = zod.object({
+  vendorByItemId: zod
+    .record(zod.string(), zod.string())
+    .optional()
+    .describe(
+      "Map of PR item id to vendor name (used when creating POs\/Import Jobs)",
+    ),
+  notes: zod.string().nullish(),
+});
+
+export const ApprovePurchaseRequestResponse = zod
+  .object({
+    id: zod.number(),
+    prNumber: zod.string(),
+    workOrderId: zod.number(),
+    workOrderNumber: zod.string().nullish(),
+    woNumber: zod.string().nullish(),
+    customerName: zod.string().nullish(),
+    status: zod.enum(["proposed", "approved", "rejected", "cancelled"]),
+    notes: zod.string().nullish(),
+    approvedById: zod.number().nullish(),
+    approvedByName: zod.string().nullish(),
+    approvedAt: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    createdByName: zod.string().nullish(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+    itemCount: zod.number(),
+    totalEstimatedValue: zod.number(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          purchaseRequestId: zod.number(),
+          workOrderItemId: zod.number().nullish(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          branch: zod.enum(["manufactured", "raw", "imported"]),
+          description: zod.string(),
+          unit: zod.string().nullish(),
+          requiredQty: zod.number(),
+          onHandQty: zod.number(),
+          shortfallQty: zod.number(),
+          estimatedUnitCost: zod.number(),
+          status: zod.enum([
+            "pending",
+            "issuedFromStock",
+            "convertedToPo",
+            "convertedToImport",
+            "cancelled",
+          ]),
+          purchaseOrderId: zod.number().nullish(),
+          purchaseOrderNumber: zod.string().nullish(),
+          importJobId: zod.number().nullish(),
+          importJobNumber: zod.string().nullish(),
+          notes: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Reject a PR
+ */
+export const RejectPurchaseRequestParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RejectPurchaseRequestBody = zod.object({
+  reason: zod.string().nullish(),
+});
+
+export const RejectPurchaseRequestResponse = zod
+  .object({
+    id: zod.number(),
+    prNumber: zod.string(),
+    workOrderId: zod.number(),
+    workOrderNumber: zod.string().nullish(),
+    woNumber: zod.string().nullish(),
+    customerName: zod.string().nullish(),
+    status: zod.enum(["proposed", "approved", "rejected", "cancelled"]),
+    notes: zod.string().nullish(),
+    approvedById: zod.number().nullish(),
+    approvedByName: zod.string().nullish(),
+    approvedAt: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    createdByName: zod.string().nullish(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+    itemCount: zod.number(),
+    totalEstimatedValue: zod.number(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          purchaseRequestId: zod.number(),
+          workOrderItemId: zod.number().nullish(),
+          productId: zod.number().nullish(),
+          productCode: zod.string().nullish(),
+          productImageUrl: zod.string().nullish(),
+          branch: zod.enum(["manufactured", "raw", "imported"]),
+          description: zod.string(),
+          unit: zod.string().nullish(),
+          requiredQty: zod.number(),
+          onHandQty: zod.number(),
+          shortfallQty: zod.number(),
+          estimatedUnitCost: zod.number(),
+          status: zod.enum([
+            "pending",
+            "issuedFromStock",
+            "convertedToPo",
+            "convertedToImport",
+            "cancelled",
+          ]),
+          purchaseOrderId: zod.number().nullish(),
+          purchaseOrderNumber: zod.string().nullish(),
+          importJobId: zod.number().nullish(),
+          importJobNumber: zod.string().nullish(),
+          notes: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary List cost-stamped stock movements
+ */
+export const GetStockMovementsQueryParams = zod.object({
+  workOrderId: zod.coerce.number().optional(),
+  itemId: zod.coerce.number().optional(),
+  movementType: zod.enum(["in", "out"]).optional(),
+});
+
+export const GetStockMovementsResponseItem = zod.object({
+  id: zod.number(),
+  itemId: zod.number(),
+  itemCode: zod.string().nullish(),
+  itemName: zod.string().nullish(),
+  movementType: zod.enum(["in", "out"]),
+  qty: zod.number(),
+  unitCost: zod.number(),
+  totalCost: zod.number(),
+  sourceType: zod.string(),
+  sourceId: zod.number().nullish(),
+  sourceNumber: zod.string().nullish(),
+  workOrderId: zod.number().nullish(),
+  workOrderNumber: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdById: zod.number().nullish(),
+  createdByName: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const GetStockMovementsResponse = zod.array(
+  GetStockMovementsResponseItem,
+);
+
+/**
+ * @summary Record a Stores In movement (manual or from upstream source)
+ */
+export const CreateStockInBody = zod.object({
+  itemId: zod.number(),
+  qty: zod.number(),
+  unitCost: zod.number(),
+  sourceType: zod.enum([
+    "purchaseOrder",
+    "importJob",
+    "subcontractIn",
+    "production",
+    "manual",
+    "openingBalance",
+  ]),
+  sourceId: zod.number().nullish(),
+  sourceNumber: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Record a Stores Out movement (issue against a WO)
+ */
+export const CreateStockOutBody = zod.object({
+  itemId: zod.number(),
+  qty: zod.number(),
+  workOrderId: zod.number().nullish(),
+  sourceType: zod.enum(["workOrderIssue", "subcontractIssue", "manual"]),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary List subcontract jobs
+ */
+export const GetSubcontractJobsQueryParams = zod.object({
+  workOrderId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+});
+
+export const GetSubcontractJobsResponseItem = zod.object({
+  id: zod.number(),
+  jobNumber: zod.string(),
+  workOrderId: zod.number().nullish(),
+  workOrderNumber: zod.string().nullish(),
+  vendorName: zod.string(),
+  vendorContact: zod.string().nullish(),
+  status: zod.enum(["sentOut", "received", "cancelled"]),
+  totalVendorCost: zod.number(),
+  notes: zod.string().nullish(),
+  sentAt: zod.string(),
+  receivedAt: zod.string().nullish(),
+  createdById: zod.number().nullish(),
+  createdByName: zod.string().nullish(),
+  createdAt: zod.string(),
+  itemCount: zod.number(),
+});
+export const GetSubcontractJobsResponse = zod.array(
+  GetSubcontractJobsResponseItem,
+);
+
+/**
+ * @summary Create a Subcontract Job Out (issues raw materials to a vendor)
+ */
+export const CreateSubcontractJobBody = zod.object({
+  workOrderId: zod.number().nullish(),
+  vendorName: zod.string(),
+  vendorContact: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      rawItemId: zod.number(),
+      sentQty: zod.number(),
+      finishedItemId: zod.number().nullish(),
+      vendorChargePerUnit: zod.number().optional(),
+      notes: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get a subcontract job with items
+ */
+export const GetSubcontractJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetSubcontractJobResponse = zod
+  .object({
+    id: zod.number(),
+    jobNumber: zod.string(),
+    workOrderId: zod.number().nullish(),
+    workOrderNumber: zod.string().nullish(),
+    vendorName: zod.string(),
+    vendorContact: zod.string().nullish(),
+    status: zod.enum(["sentOut", "received", "cancelled"]),
+    totalVendorCost: zod.number(),
+    notes: zod.string().nullish(),
+    sentAt: zod.string(),
+    receivedAt: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    createdByName: zod.string().nullish(),
+    createdAt: zod.string(),
+    itemCount: zod.number(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          subcontractJobId: zod.number(),
+          rawItemId: zod.number(),
+          rawItemCode: zod.string().nullish(),
+          rawItemName: zod.string().nullish(),
+          sentQty: zod.number(),
+          sentUnitCost: zod.number(),
+          finishedItemId: zod.number().nullish(),
+          finishedItemCode: zod.string().nullish(),
+          finishedItemName: zod.string().nullish(),
+          receivedQty: zod.number(),
+          scrapQty: zod.number(),
+          vendorChargePerUnit: zod.number(),
+          computedUnitCost: zod.number(),
+          notes: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Record receipt of subcontract job (good qty + scrap), posts Stores In with computed unit cost
+ */
+export const ReceiveSubcontractJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ReceiveSubcontractJobBody = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      receivedQty: zod.number(),
+      scrapQty: zod.number().optional(),
+      vendorChargePerUnit: zod.number().optional(),
+      finishedItemId: zod.number().nullish(),
+    }),
+  ),
+  totalVendorCost: zod.number().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const ReceiveSubcontractJobResponse = zod
+  .object({
+    id: zod.number(),
+    jobNumber: zod.string(),
+    workOrderId: zod.number().nullish(),
+    workOrderNumber: zod.string().nullish(),
+    vendorName: zod.string(),
+    vendorContact: zod.string().nullish(),
+    status: zod.enum(["sentOut", "received", "cancelled"]),
+    totalVendorCost: zod.number(),
+    notes: zod.string().nullish(),
+    sentAt: zod.string(),
+    receivedAt: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    createdByName: zod.string().nullish(),
+    createdAt: zod.string(),
+    itemCount: zod.number(),
+  })
+  .and(
+    zod.object({
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          subcontractJobId: zod.number(),
+          rawItemId: zod.number(),
+          rawItemCode: zod.string().nullish(),
+          rawItemName: zod.string().nullish(),
+          sentQty: zod.number(),
+          sentUnitCost: zod.number(),
+          finishedItemId: zod.number().nullish(),
+          finishedItemCode: zod.string().nullish(),
+          finishedItemName: zod.string().nullish(),
+          receivedQty: zod.number(),
+          scrapQty: zod.number(),
+          vendorChargePerUnit: zod.number(),
+          computedUnitCost: zod.number(),
+          notes: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Mark Import Job received and post Stores In with per-unit landed cost
+ */
+export const ReceiveImportJobToStoresParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ReceiveImportJobToStoresResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
+});

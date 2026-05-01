@@ -12,6 +12,9 @@ import {
   useUpsertDelivery,
   useGenerateInvoice,
   useMarkFinishedGoods,
+  useReleaseWorkOrder,
+  useGenerateInvoiceFromStores,
+  useGetWorkOrderPnl,
   getGetWorkOrderQueryKey,
   type WorkOrder,
   type WorkOrderItem,
@@ -37,6 +40,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   ArrowLeft, Briefcase, Package, Factory, CheckCircle, XCircle,
   PackageCheck, Truck, FileText, AlertTriangle, ChevronRight, Plus, X,
+  ClipboardList, TrendingUp, FileSpreadsheet,
 } from "lucide-react";
 import { ProductPicker, type PickedProduct } from "@/components/ProductPicker";
 import { objectPathToUrl } from "@/lib/uploadFile";
@@ -239,6 +243,26 @@ export default function WorkOrderDetail() {
   const upsertDelivery = useUpsertDelivery({ mutation: { onSuccess: () => { invalidate(); setShowDelivery(false); toast({ title: "Delivery updated" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
   const generateInv = useGenerateInvoice({ mutation: { onSuccess: (d) => { invalidate(); toast({ title: `Invoice generated: ${d.invoiceNumber}` }); }, onError: () => toast({ title: "Failed to generate invoice", variant: "destructive" }) } });
   const markFinished = useMarkFinishedGoods({ mutation: { onSuccess: () => { invalidate(); toast({ title: "Finished goods received" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
+  const releaseWO = useReleaseWorkOrder({
+    mutation: {
+      onSuccess: (d) => {
+        invalidate();
+        toast({ title: `Released — Purchase Request ${d.prNumber} created` });
+        navigate(`/purchase-requests`);
+      },
+      onError: (e: Error) => toast({ title: e.message ?? "Failed to release WO", variant: "destructive" }),
+    },
+  });
+  const generateInvFromStores = useGenerateInvoiceFromStores({
+    mutation: {
+      onSuccess: (d) => {
+        invalidate();
+        toast({ title: `Invoice generated from Stores: ${d.invoiceNumber}` });
+      },
+      onError: (e: Error) => toast({ title: e.message ?? "No stock-out activity to invoice", variant: "destructive" }),
+    },
+  });
+  const { data: pnl } = useGetWorkOrderPnl(woId ?? 0);
 
   const canWrite = user && ["sales", "purchase", "manager", "director", "admin", "cfo", "stores", "accounts"].includes(user.role);
   const canApprove = user && APPROVE_ROLES.includes(user.role);
@@ -405,6 +429,80 @@ export default function WorkOrderDetail() {
         <div className="bg-muted/50 rounded-md px-4 py-3 text-sm text-muted-foreground">
           {wo.notes}
         </div>
+      )}
+
+      {/* Pipeline Action Bar */}
+      <Card className="border-dashed">
+        <CardContent className="pt-4 pb-4 flex flex-wrap items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            disabled={releaseWO.isPending || wo.status === "delivered" || wo.status === "cancelled"}
+            onClick={() => woId && releaseWO.mutate({ id: woId })}
+            data-testid="button-release-wo"
+          >
+            <ClipboardList className="h-4 w-4 mr-1" />
+            Release → Create Purchase Request
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={generateInvFromStores.isPending}
+            onClick={() => woId && generateInvFromStores.mutate({ id: woId })}
+            data-testid="button-invoice-from-stores"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            Generate Invoice from Stores
+          </Button>
+          <div className="ml-auto flex items-center gap-2 text-xs">
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/purchase-requests`)}>
+              View PRs
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/stores-out`)}>
+              Stores Out
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/subcontract-jobs`)}>
+              Subcontract
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Per-WO P&L summary */}
+      {pnl && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Profit & Loss
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <div className="text-xs text-muted-foreground">Revenue (Invoiced)</div>
+                <div className="font-bold text-green-700">₹{pnl.revenueInvoiced.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{pnl.invoiceCount} invoice(s)</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Stores Cost</div>
+                <div className="font-bold">₹{pnl.costStoresOut.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{pnl.storesOutCount} issue(s)</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Subcontract + Imports</div>
+                <div className="font-bold">₹{(pnl.costSubcontract + pnl.costImportExpenses).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Margin</div>
+                <div className={`font-bold ${pnl.margin >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                  ₹{pnl.margin.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  <span className="text-xs ml-1">({pnl.marginPercent.toFixed(1)}%)</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <div className="space-y-4">

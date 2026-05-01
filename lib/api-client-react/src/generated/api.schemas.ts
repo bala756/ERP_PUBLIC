@@ -1557,6 +1557,270 @@ export interface UpdateAppSettingsBody {
   proposalTermsAndConditions?: string | null;
 }
 
+export type PurchaseRequestStatus =
+  (typeof PurchaseRequestStatus)[keyof typeof PurchaseRequestStatus];
+
+export const PurchaseRequestStatus = {
+  proposed: "proposed",
+  approved: "approved",
+  rejected: "rejected",
+  cancelled: "cancelled",
+} as const;
+
+export interface PurchaseRequest {
+  id: number;
+  prNumber: string;
+  workOrderId: number;
+  workOrderNumber?: string | null;
+  woNumber?: string | null;
+  customerName?: string | null;
+  status: PurchaseRequestStatus;
+  notes?: string | null;
+  approvedById?: number | null;
+  approvedByName?: string | null;
+  approvedAt?: string | null;
+  createdById?: number | null;
+  createdByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  itemCount: number;
+  totalEstimatedValue: number;
+}
+
+export type PurchaseRequestItemBranch =
+  (typeof PurchaseRequestItemBranch)[keyof typeof PurchaseRequestItemBranch];
+
+export const PurchaseRequestItemBranch = {
+  manufactured: "manufactured",
+  raw: "raw",
+  imported: "imported",
+} as const;
+
+export type PurchaseRequestItemStatus =
+  (typeof PurchaseRequestItemStatus)[keyof typeof PurchaseRequestItemStatus];
+
+export const PurchaseRequestItemStatus = {
+  pending: "pending",
+  issuedFromStock: "issuedFromStock",
+  convertedToPo: "convertedToPo",
+  convertedToImport: "convertedToImport",
+  cancelled: "cancelled",
+} as const;
+
+export interface PurchaseRequestItem {
+  id: number;
+  purchaseRequestId: number;
+  workOrderItemId?: number | null;
+  productId?: number | null;
+  productCode?: string | null;
+  productImageUrl?: string | null;
+  branch: PurchaseRequestItemBranch;
+  description: string;
+  unit?: string | null;
+  requiredQty: number;
+  onHandQty: number;
+  shortfallQty: number;
+  estimatedUnitCost: number;
+  status: PurchaseRequestItemStatus;
+  purchaseOrderId?: number | null;
+  purchaseOrderNumber?: string | null;
+  importJobId?: number | null;
+  importJobNumber?: string | null;
+  notes?: string | null;
+}
+
+export type PurchaseRequestDetail = PurchaseRequest & {
+  items: PurchaseRequestItem[];
+};
+
+export type UpdatePurchaseRequestBodyItemsItemBranch =
+  (typeof UpdatePurchaseRequestBodyItemsItemBranch)[keyof typeof UpdatePurchaseRequestBodyItemsItemBranch];
+
+export const UpdatePurchaseRequestBodyItemsItemBranch = {
+  manufactured: "manufactured",
+  raw: "raw",
+  imported: "imported",
+} as const;
+
+export type UpdatePurchaseRequestBodyItemsItem = {
+  id: number;
+  shortfallQty?: number;
+  branch?: UpdatePurchaseRequestBodyItemsItemBranch;
+  estimatedUnitCost?: number;
+  notes?: string | null;
+};
+
+export interface UpdatePurchaseRequestBody {
+  notes?: string | null;
+  items?: UpdatePurchaseRequestBodyItemsItem[];
+}
+
+export type StockMovementMovementType =
+  (typeof StockMovementMovementType)[keyof typeof StockMovementMovementType];
+
+export const StockMovementMovementType = {
+  in: "in",
+  out: "out",
+} as const;
+
+export interface StockMovement {
+  id: number;
+  itemId: number;
+  itemCode?: string | null;
+  itemName?: string | null;
+  movementType: StockMovementMovementType;
+  qty: number;
+  unitCost: number;
+  totalCost: number;
+  sourceType: string;
+  sourceId?: number | null;
+  sourceNumber?: string | null;
+  workOrderId?: number | null;
+  workOrderNumber?: string | null;
+  notes?: string | null;
+  createdById?: number | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export type CreateStockInBodySourceType =
+  (typeof CreateStockInBodySourceType)[keyof typeof CreateStockInBodySourceType];
+
+export const CreateStockInBodySourceType = {
+  purchaseOrder: "purchaseOrder",
+  importJob: "importJob",
+  subcontractIn: "subcontractIn",
+  production: "production",
+  manual: "manual",
+  openingBalance: "openingBalance",
+} as const;
+
+export interface CreateStockInBody {
+  itemId: number;
+  qty: number;
+  unitCost: number;
+  sourceType: CreateStockInBodySourceType;
+  sourceId?: number | null;
+  sourceNumber?: string | null;
+  notes?: string | null;
+}
+
+export type CreateStockOutBodySourceType =
+  (typeof CreateStockOutBodySourceType)[keyof typeof CreateStockOutBodySourceType];
+
+export const CreateStockOutBodySourceType = {
+  workOrderIssue: "workOrderIssue",
+  subcontractIssue: "subcontractIssue",
+  manual: "manual",
+} as const;
+
+export interface CreateStockOutBody {
+  itemId: number;
+  qty: number;
+  workOrderId?: number | null;
+  sourceType: CreateStockOutBodySourceType;
+  notes?: string | null;
+}
+
+export type SubcontractJobStatus =
+  (typeof SubcontractJobStatus)[keyof typeof SubcontractJobStatus];
+
+export const SubcontractJobStatus = {
+  sentOut: "sentOut",
+  received: "received",
+  cancelled: "cancelled",
+} as const;
+
+export interface SubcontractJob {
+  id: number;
+  jobNumber: string;
+  workOrderId?: number | null;
+  workOrderNumber?: string | null;
+  vendorName: string;
+  vendorContact?: string | null;
+  status: SubcontractJobStatus;
+  totalVendorCost: number;
+  notes?: string | null;
+  sentAt: string;
+  receivedAt?: string | null;
+  createdById?: number | null;
+  createdByName?: string | null;
+  createdAt: string;
+  itemCount: number;
+}
+
+export interface SubcontractJobItem {
+  id: number;
+  subcontractJobId: number;
+  rawItemId: number;
+  rawItemCode?: string | null;
+  rawItemName?: string | null;
+  sentQty: number;
+  sentUnitCost: number;
+  finishedItemId?: number | null;
+  finishedItemCode?: string | null;
+  finishedItemName?: string | null;
+  receivedQty: number;
+  scrapQty: number;
+  vendorChargePerUnit: number;
+  computedUnitCost: number;
+  notes?: string | null;
+}
+
+export type SubcontractJobDetail = SubcontractJob & {
+  items: SubcontractJobItem[];
+};
+
+export type CreateSubcontractJobBodyItemsItem = {
+  rawItemId: number;
+  sentQty: number;
+  finishedItemId?: number | null;
+  vendorChargePerUnit?: number;
+  notes?: string | null;
+};
+
+export interface CreateSubcontractJobBody {
+  workOrderId?: number | null;
+  vendorName: string;
+  vendorContact?: string | null;
+  notes?: string | null;
+  items: CreateSubcontractJobBodyItemsItem[];
+}
+
+export type ReceiveSubcontractJobBodyItemsItem = {
+  id: number;
+  receivedQty: number;
+  scrapQty?: number;
+  vendorChargePerUnit?: number;
+  finishedItemId?: number | null;
+};
+
+export interface ReceiveSubcontractJobBody {
+  items: ReceiveSubcontractJobBodyItemsItem[];
+  totalVendorCost?: number | null;
+  notes?: string | null;
+}
+
+export interface WorkOrderPnl {
+  workOrderId: number;
+  workOrderNumber: string;
+  customerName: string;
+  status: string;
+  revenueInvoiced: number;
+  revenueOrderValue: number;
+  costStoresOut: number;
+  costSubcontract: number;
+  costImportExpenses: number;
+  directExpenses: number;
+  totalCost: number;
+  margin: number;
+  marginPercent: number;
+  invoiceCount: number;
+  storesOutCount: number;
+}
+
+export type WorkOrderPnlRow = WorkOrderPnl;
+
 export type GetUsersParams = {
   department?: string;
   role?: string;
@@ -1669,5 +1933,47 @@ export type PaySupplierBillBody = {
 };
 
 export type GetExpensesParams = {
+  status?: string;
+};
+
+export type GetPurchaseRequestsParams = {
+  workOrderId?: number;
+  status?: string;
+  branch?: string;
+};
+
+/**
+ * Map of PR item id to vendor name (used when creating POs/Import Jobs)
+ */
+export type ApprovePurchaseRequestBodyVendorByItemId = {
+  [key: string]: string;
+};
+
+export type ApprovePurchaseRequestBody = {
+  /** Map of PR item id to vendor name (used when creating POs/Import Jobs) */
+  vendorByItemId?: ApprovePurchaseRequestBodyVendorByItemId;
+  notes?: string | null;
+};
+
+export type RejectPurchaseRequestBody = {
+  reason?: string | null;
+};
+
+export type GetStockMovementsParams = {
+  workOrderId?: number;
+  itemId?: number;
+  movementType?: GetStockMovementsMovementType;
+};
+
+export type GetStockMovementsMovementType =
+  (typeof GetStockMovementsMovementType)[keyof typeof GetStockMovementsMovementType];
+
+export const GetStockMovementsMovementType = {
+  in: "in",
+  out: "out",
+} as const;
+
+export type GetSubcontractJobsParams = {
+  workOrderId?: number;
   status?: string;
 };

@@ -11,8 +11,11 @@ import {
   usersTable,
   gstInvoicesTable,
   invoiceLineItemsTable,
+  stockMovementsTable,
+  subcontractJobsTable,
+  inventoryItemsTable,
 } from "@workspace/db";
-import { eq, and, or, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { z } from "zod";
 import { logger } from "../lib/logger";
@@ -423,6 +426,121 @@ ordersRouter.get("/work-orders", requireRole(...VIEW_ROLES), async (req, res) =>
 
   res.json(rows.map(({ wo, itemCount }) => ({ ...serializeWO(wo), itemCount: Number(itemCount) })));
 });
+
+// ─── GET /work-orders/pnl-summary ─────────────────────────────────────────────
+ordersRouter.get(
+  "/work-orders/pnl-summary",
+  requireRole(...VIEW_ROLES),
+  async (_req, res) => {
+    // Revenue per WO
+    const revRows = await db
+      .select({
+        workOrderId: gstInvoicesTable.workOrderId,
+        revenue: sql<string>`COALESCE(SUM(${gstInvoicesTable.subtotal}), 0)`.as(
+          "revenue",
+        ),
+        invoiceCount: sql<string>`COUNT(*)`.as("invoice_count"),
+      })
+      .from(gstInvoicesTable)
+      .groupBy(gstInvoicesTable.workOrderId);
+
+    const cogsRows = await db
+      .select({
+        workOrderId: stockMovementsTable.workOrderId,
+        cogs: sql<string>`COALESCE(SUM(${stockMovementsTable.totalCost}), 0)`.as(
+          "cogs",
+        ),
+        outCount: sql<string>`COUNT(*)`.as("out_count"),
+      })
+      .from(stockMovementsTable)
+      .where(eq(stockMovementsTable.movementType, "out"))
+      .groupBy(stockMovementsTable.workOrderId);
+
+    const subRows = await db
+      .select({
+        workOrderId: subcontractJobsTable.workOrderId,
+        subCost:
+          sql<string>`COALESCE(SUM(${subcontractJobsTable.totalVendorCost}), 0)`.as(
+            "sub_cost",
+          ),
+      })
+      .from(subcontractJobsTable)
+      .groupBy(subcontractJobsTable.workOrderId);
+
+    const revMap = new Map<number, { revenue: number; invoiceCount: number }>();
+    for (const r of revRows) {
+      if (r.workOrderId !== null)
+        revMap.set(r.workOrderId, {
+          revenue: parseFloat(r.revenue),
+          invoiceCount: parseInt(r.invoiceCount, 10),
+        });
+    }
+    const cogsMap = new Map<number, { cogs: number; outCount: number }>();
+    for (const r of cogsRows) {
+      if (r.workOrderId !== null)
+        cogsMap.set(r.workOrderId, {
+          cogs: parseFloat(r.cogs),
+          outCount: parseInt(r.outCount, 10),
+        });
+    }
+    const subMap = new Map<number, number>();
+    for (const r of subRows) {
+      if (r.workOrderId !== null) subMap.set(r.workOrderId, parseFloat(r.subCost));
+    }
+
+    const allWoIds = Array.from(
+      new Set<number>([
+        ...revMap.keys(),
+        ...cogsMap.keys(),
+        ...subMap.keys(),
+      ]),
+    );
+    if (allWoIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    const wos = await db
+      .select()
+      .from(workOrdersTable)
+      .where(inArray(workOrdersTable.id, allWoIds));
+
+    const rows = wos.map((wo) => {
+      const rev = revMap.get(wo.id);
+      const cogsEntry = cogsMap.get(wo.id);
+      const revenueInvoiced = rev?.revenue ?? 0;
+      const revenueOrderValue = parseFloat(wo.total ?? "0") || 0;
+      const costStoresOut = cogsEntry?.cogs ?? 0;
+      const costSubcontract = subMap.get(wo.id) ?? 0;
+      const costImportExpenses = 0;
+      const directExpenses = 0;
+      const totalCost =
+        costStoresOut + costSubcontract + costImportExpenses + directExpenses;
+      const margin = revenueInvoiced - totalCost;
+      const marginPercent =
+        revenueInvoiced > 0 ? (margin / revenueInvoiced) * 100 : 0;
+      return {
+        workOrderId: wo.id,
+        workOrderNumber: wo.woNumber,
+        customerName: wo.customerName,
+        status: wo.status,
+        revenueInvoiced,
+        revenueOrderValue,
+        costStoresOut,
+        costSubcontract,
+        costImportExpenses,
+        directExpenses,
+        totalCost,
+        margin,
+        marginPercent,
+        invoiceCount: rev?.invoiceCount ?? 0,
+        storesOutCount: cogsEntry?.outCount ?? 0,
+      };
+    });
+
+    rows.sort((a, b) => b.workOrderId - a.workOrderId);
+    res.json(rows);
+  },
+);
 
 ordersRouter.get("/work-orders/:id", requireRole(...VIEW_ROLES), async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
@@ -1170,5 +1288,290 @@ ordersRouter.post(
     res.json(detail);
   },
 );
+
+// ─── POST /work-orders/:id/generate-invoice-from-stores ──────────────────────
+// Groups stock_movements OUT for this WO by product, computes total qty &
+// COGS, and creates a GST invoice with one line per product. Falls back to
+// existing invoice (idempotent) if one already exists.
+ordersRouter.post(
+  "/work-orders/:id/generate-invoice-from-stores",
+  requireRole(...INVOICE_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const [woRow] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, id));
+    if (!woRow) {
+      res.status(404).json({ error: "Work order not found" });
+      return;
+    }
+
+    const paramsSchema = z.object({
+      transactionType: z.enum(["intrastate", "interstate"]).default("intrastate"),
+      customerGstin: z.string().optional(),
+      bcaGstin: z.string().optional(),
+      defaultGstRate: z.number().min(0).max(28).default(18),
+      marginPercent: z.number().min(0).max(1000).default(20),
+      dueDate: z.string().optional(),
+    });
+    const params = paramsSchema.parse(req.body ?? {});
+
+    const existingInvoices = await db
+      .select({ id: gstInvoicesTable.id, invoiceNumber: gstInvoicesTable.invoiceNumber })
+      .from(gstInvoicesTable)
+      .where(eq(gstInvoicesTable.workOrderId, id));
+
+    if (existingInvoices.length > 0) {
+      const detail = await getWOWithDetails(id);
+      res.json({
+        workOrder: detail,
+        invoiceNumber: existingInvoices[0].invoiceNumber,
+        gstInvoiceId: existingInvoices[0].id,
+        reused: true,
+      });
+      return;
+    }
+
+    // Group stores-out movements by itemId
+    const movements = await db
+      .select()
+      .from(stockMovementsTable)
+      .where(
+        and(
+          eq(stockMovementsTable.workOrderId, id),
+          eq(stockMovementsTable.movementType, "out"),
+        ),
+      );
+    if (movements.length === 0) {
+      res.status(400).json({
+        error: "No Stores-Out movements found for this WO. Issue stock first.",
+      });
+      return;
+    }
+
+    const byItem = new Map<number, { qty: number; cost: number }>();
+    for (const m of movements) {
+      const cur = byItem.get(m.itemId) ?? { qty: 0, cost: 0 };
+      cur.qty += parseFloat(m.qty);
+      cur.cost += parseFloat(m.totalCost);
+      byItem.set(m.itemId, cur);
+    }
+
+    const itemIds = Array.from(byItem.keys());
+    const products = await db
+      .select()
+      .from(inventoryItemsTable)
+      .where(inArray(inventoryItemsTable.id, itemIds));
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const today = new Date().toISOString().slice(0, 10);
+    const invoiceNumber = await generateInvoiceNumber();
+
+    let subtotal = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalIgst = 0;
+
+    const lineData = itemIds.map((itemId) => {
+      const agg = byItem.get(itemId)!;
+      const prod = productById.get(itemId);
+      const cogsPerUnit = agg.qty > 0 ? agg.cost / agg.qty : 0;
+      const salePerUnit =
+        prod && parseFloat(prod.defaultSalePrice) > 0
+          ? parseFloat(prod.defaultSalePrice)
+          : cogsPerUnit * (1 + params.marginPercent / 100);
+      const taxableValue = agg.qty * salePerUnit;
+      const gstRate = prod ? parseFloat(prod.gstRate) : params.defaultGstRate;
+      const { cgst, sgst, igst } = calcGst(taxableValue, gstRate, params.transactionType);
+      subtotal += taxableValue;
+      totalCgst += cgst;
+      totalSgst += sgst;
+      totalIgst += igst;
+      return {
+        description: prod?.name ?? `Item ${itemId}`,
+        hsnCode: prod?.hsnCode ?? null,
+        qty: agg.qty.toFixed(4),
+        unitPrice: salePerUnit.toFixed(2),
+        taxableValue: taxableValue.toFixed(2),
+        gstRate: String(gstRate),
+        cgstAmount: cgst.toFixed(2),
+        sgstAmount: sgst.toFixed(2),
+        igstAmount: igst.toFixed(2),
+        lineTotal: (taxableValue + cgst + sgst + igst).toFixed(2),
+      };
+    });
+
+    const total = subtotal + totalCgst + totalSgst + totalIgst;
+
+    const [newInvoice] = await db
+      .insert(gstInvoicesTable)
+      .values({
+        invoiceNumber,
+        invoiceDate: today,
+        customerName: woRow.customerName,
+        customerGstin: params.customerGstin,
+        bcaGstin: params.bcaGstin,
+        workOrderId: id,
+        transactionType: params.transactionType,
+        subtotal: subtotal.toFixed(2),
+        cgstAmount: totalCgst.toFixed(2),
+        sgstAmount: totalSgst.toFixed(2),
+        igstAmount: totalIgst.toFixed(2),
+        total: total.toFixed(2),
+        dueDate: params.dueDate,
+        createdById: req.session.userId ?? null,
+      })
+      .returning();
+
+    if (lineData.length > 0) {
+      await db.insert(invoiceLineItemsTable).values(
+        lineData.map((l) => ({
+          invoiceId: newInvoice.id,
+          description: l.description,
+          hsnCode: l.hsnCode,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          taxableValue: l.taxableValue,
+          gstRate: l.gstRate,
+          cgstAmount: l.cgstAmount,
+          sgstAmount: l.sgstAmount,
+          igstAmount: l.igstAmount,
+          lineTotal: l.lineTotal,
+        })),
+      );
+    }
+
+    // Mark as delivered + invoiced
+    const existing = await db
+      .select()
+      .from(deliveryRecordsTable)
+      .where(eq(deliveryRecordsTable.workOrderId, id));
+    if (existing.length > 0) {
+      await db
+        .update(deliveryRecordsTable)
+        .set({
+          invoiceGenerated: true,
+          invoiceNumber,
+          invoiceGeneratedAt: new Date(),
+          status: "delivered",
+        })
+        .where(eq(deliveryRecordsTable.workOrderId, id));
+    } else {
+      await db.insert(deliveryRecordsTable).values({
+        workOrderId: id,
+        invoiceGenerated: true,
+        invoiceNumber,
+        invoiceGeneratedAt: new Date(),
+        status: "delivered",
+      });
+    }
+    await db
+      .update(workOrdersTable)
+      .set({ status: "delivered" })
+      .where(eq(workOrdersTable.id, id));
+    await db
+      .update(workOrderItemsTable)
+      .set({ currentStep: "invoiced" })
+      .where(eq(workOrderItemsTable.workOrderId, id));
+
+    logger.info(
+      { invoiceNumber, woId: id, gstInvoiceId: newInvoice.id, lines: lineData.length },
+      "Stores-driven GST invoice generated",
+    );
+    const detail = await getWOWithDetails(id);
+    res.json({
+      workOrder: detail,
+      invoiceNumber,
+      gstInvoiceId: newInvoice.id,
+      reused: false,
+    });
+  },
+);
+
+// ─── GET /work-orders/:id/pnl ────────────────────────────────────────────────
+ordersRouter.get(
+  "/work-orders/:id/pnl",
+  requireRole(...VIEW_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const [woRow] = await db
+      .select()
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, id));
+    if (!woRow) {
+      res.status(404).json({ error: "Work order not found" });
+      return;
+    }
+
+    const invoiceRows = await db
+      .select({
+        subtotal: gstInvoicesTable.subtotal,
+        total: gstInvoicesTable.total,
+      })
+      .from(gstInvoicesTable)
+      .where(eq(gstInvoicesTable.workOrderId, id));
+    const revenueInvoiced = invoiceRows.reduce(
+      (sum, r) => sum + parseFloat(r.subtotal),
+      0,
+    );
+    const revenueOrderValue = parseFloat(woRow.total ?? "0") || 0;
+
+    const costRows = await db
+      .select({ totalCost: stockMovementsTable.totalCost })
+      .from(stockMovementsTable)
+      .where(
+        and(
+          eq(stockMovementsTable.workOrderId, id),
+          eq(stockMovementsTable.movementType, "out"),
+        ),
+      );
+    const costStoresOut = costRows.reduce(
+      (sum, r) => sum + parseFloat(r.totalCost),
+      0,
+    );
+
+    const subRows = await db
+      .select({ totalVendorCost: subcontractJobsTable.totalVendorCost })
+      .from(subcontractJobsTable)
+      .where(eq(subcontractJobsTable.workOrderId, id));
+    const costSubcontract = subRows.reduce(
+      (sum, r) => sum + parseFloat(r.totalVendorCost),
+      0,
+    );
+
+    const costImportExpenses = 0;
+    const directExpenses = 0;
+    const totalCost =
+      costStoresOut + costSubcontract + costImportExpenses + directExpenses;
+    const margin = revenueInvoiced - totalCost;
+    const marginPercent =
+      revenueInvoiced > 0 ? (margin / revenueInvoiced) * 100 : 0;
+
+    res.json({
+      workOrderId: id,
+      workOrderNumber: woRow.woNumber,
+      customerName: woRow.customerName,
+      status: woRow.status,
+      revenueInvoiced,
+      revenueOrderValue,
+      costStoresOut,
+      costSubcontract,
+      costImportExpenses,
+      directExpenses,
+      totalCost,
+      margin,
+      marginPercent,
+      invoiceCount: invoiceRows.length,
+      storesOutCount: costRows.length,
+    });
+  },
+);
+
 
 export default ordersRouter;

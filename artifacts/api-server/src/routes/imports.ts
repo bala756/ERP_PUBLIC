@@ -8,6 +8,8 @@ import {
   inventoryItemsTable,
   purchaseOrdersTable,
   usersTable,
+  stockMovementsTable,
+  stockTransactionsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -978,5 +980,94 @@ importsRouter.post(
     }
   },
 );
+
+// ─── POST /import-jobs/:id/receive ────────────────────────────────────────────
+// Posts stock_movements IN for each line at the per-unit landed cost (INR).
+// Recomputes landed cost first to ensure costs are fresh.
+importsRouter.post(
+  "/import-jobs/:id/receive",
+  requireRole(...WRITE_ROLES),
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
+    try {
+      const [job] = await db
+        .select()
+        .from(importJobsTable)
+        .where(eq(importJobsTable.id, id));
+      if (!job) {
+        res.status(404).json({ message: "Not found" });
+        return;
+      }
+      if (job.status === "received" || job.status === "closed") {
+        res.status(400).json({ message: `Import job already ${job.status}` });
+        return;
+      }
+
+      await recalculateLandedCost(id);
+
+      const items = await db
+        .select()
+        .from(importJobItemsTable)
+        .where(eq(importJobItemsTable.importJobId, id));
+
+      const movementIds: number[] = [];
+      for (const it of items) {
+        if (!it.inventoryItemId) continue;
+        const qty = parseFloat(it.qty);
+        if (qty <= 0) continue;
+        const unitCost = parseFloat(it.perUnitLandedCostInr);
+        const totalCost = qty * unitCost;
+        const [m] = await db
+          .insert(stockMovementsTable)
+          .values({
+            itemId: it.inventoryItemId,
+            movementType: "in",
+            qty: qty.toString(),
+            unitCost: unitCost.toString(),
+            totalCost: totalCost.toString(),
+            sourceType: "importJob",
+            sourceId: id,
+            sourceNumber: job.jobNumber,
+            notes: `Imported via ${job.jobNumber}`,
+            createdById: req.session.userId ?? null,
+          })
+          .returning();
+        movementIds.push(m.id);
+        try {
+          await db.insert(stockTransactionsTable).values({
+            itemId: it.inventoryItemId,
+            type: "in",
+            qty: qty.toString(),
+            rate: unitCost.toString(),
+            referenceType: "manual",
+            referenceNumber: job.jobNumber,
+            notes: `Imported via ${job.jobNumber}`,
+            createdById: req.session.userId ?? null,
+          });
+        } catch (err) {
+          logger.warn(
+            { err },
+            "Failed to mirror import receive into stock_transactions",
+          );
+        }
+      }
+
+      await db
+        .update(importJobsTable)
+        .set({ status: "received", updatedAt: new Date() })
+        .where(eq(importJobsTable.id, id));
+
+      res.json({ ok: true, movementIds });
+    } catch (err) {
+      logger.error({ err }, "Failed to receive import job");
+      res.status(500).json({ message: "Failed to receive import job" });
+    }
+  },
+);
+
 
 export default importsRouter;

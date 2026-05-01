@@ -41,6 +41,10 @@ import {
   Settings,
   Route,
   LogOut,
+  ClipboardList,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  TrendingUp,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -65,14 +69,18 @@ const SECTIONS = [
     title: "Operations",
     items: [
       { title: "Work Orders", url: "/work-orders", icon: Briefcase, roles: ["purchase", "manager", "director", "admin", "production"] },
+      { title: "Purchase Requests", url: "/purchase-requests", icon: ClipboardList, roles: ["purchase", "manager", "director", "admin", "production", "stores"] },
       { title: "Purchase Orders", url: "/purchase-orders", icon: ShoppingCart, roles: ["purchase", "manager", "director", "admin"] },
       { title: "Imports & Landed Cost", url: "/imports", icon: Ship, roles: ["purchase", "manager", "director", "admin", "cfo", "accounts", "stores"] },
+      { title: "Subcontract Jobs", url: "/subcontract-jobs", icon: Wrench, roles: ["purchase", "manager", "director", "admin", "production", "stores"] },
     ],
   },
   {
     title: "Inventory",
     items: [
       { title: "Inventory", url: "/inventory", icon: Package, roles: ["stores", "manager", "director", "admin"] },
+      { title: "Stores In", url: "/stores-in", icon: ArrowDownCircle, roles: ["stores", "manager", "director", "admin"] },
+      { title: "Stores Out", url: "/stores-out", icon: ArrowUpCircle, roles: ["stores", "manager", "director", "admin", "production"] },
       { title: "BOM", url: "/bom", icon: Layers, roles: ["stores", "manager", "director", "admin", "production"] },
     ],
   },
@@ -92,6 +100,7 @@ const SECTIONS = [
       { title: "Supplier Bills", url: "/supplier-bills", icon: FileCheck, roles: ["accounts", "cfo", "director", "admin", "purchase"] },
       { title: "Expenses", url: "/expenses", icon: Wallet, roles: ["accounts", "cfo", "director", "admin"] },
       { title: "Finance Reports", url: "/gst-summary", icon: BarChart2, roles: ["accounts", "cfo", "director", "admin"] },
+      { title: "Job Profitability", url: "/job-profitability", icon: TrendingUp, roles: ["accounts", "cfo", "director", "admin", "manager"] },
     ],
   },
   {

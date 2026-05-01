@@ -2059,6 +2059,382 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /work-orders/{id}/release:
+    post:
+      operationId: releaseWorkOrder
+      tags: [pipeline]
+      summary: Release a work order — explodes BOM into a Purchase Request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: PR created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseRequestDetail"
+
+  /work-orders/{id}/pnl:
+    get:
+      operationId: getWorkOrderPnl
+      tags: [pipeline]
+      summary: Get profit / loss breakdown for a work order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: P&L breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrderPnl"
+
+  /work-orders/pnl-summary:
+    get:
+      operationId: getWorkOrderPnlSummary
+      tags: [pipeline]
+      summary: Profit / loss across all work orders
+      responses:
+        "200":
+          description: P&L summary list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkOrderPnlRow"
+
+  /work-orders/{id}/generate-invoice-from-stores:
+    post:
+      operationId: generateInvoiceFromStores
+      tags: [pipeline]
+      summary: Generate a GST invoice from cost-stamped Stores Out movements for a WO
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Invoice id created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateInvoiceResult"
+
+  /purchase-requests:
+    get:
+      operationId: getPurchaseRequests
+      tags: [pipeline]
+      summary: List purchase requests
+      parameters:
+        - name: workOrderId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: branch
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PR list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseRequest"
+
+  /purchase-requests/{id}:
+    get:
+      operationId: getPurchaseRequest
+      tags: [pipeline]
+      summary: Get a purchase request with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: PR detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseRequestDetail"
+    patch:
+      operationId: updatePurchaseRequest
+      tags: [pipeline]
+      summary: Update PR header notes or item quantities
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePurchaseRequestBody"
+      responses:
+        "200":
+          description: Updated PR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseRequestDetail"
+
+  /purchase-requests/{id}/approve:
+    post:
+      operationId: approvePurchaseRequest
+      tags: [pipeline]
+      summary: Approve a PR — creates POs (manufactured + raw) and Import Jobs (imported)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendorByItemId:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Map of PR item id to vendor name (used when creating POs/Import Jobs)
+                notes:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: PR approved with downstream entities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseRequestDetail"
+
+  /purchase-requests/{id}/reject:
+    post:
+      operationId: rejectPurchaseRequest
+      tags: [pipeline]
+      summary: Reject a PR
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Rejected PR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseRequestDetail"
+
+  /stock-movements:
+    get:
+      operationId: getStockMovements
+      tags: [pipeline]
+      summary: List cost-stamped stock movements
+      parameters:
+        - name: workOrderId
+          in: query
+          schema:
+            type: integer
+        - name: itemId
+          in: query
+          schema:
+            type: integer
+        - name: movementType
+          in: query
+          schema:
+            type: string
+            enum: [in, out]
+      responses:
+        "200":
+          description: Movement list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockMovement"
+
+  /stock-movements/in:
+    post:
+      operationId: createStockIn
+      tags: [pipeline]
+      summary: Record a Stores In movement (manual or from upstream source)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStockInBody"
+      responses:
+        "201":
+          description: Stores In recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockMovement"
+
+  /stock-movements/out:
+    post:
+      operationId: createStockOut
+      tags: [pipeline]
+      summary: Record a Stores Out movement (issue against a WO)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStockOutBody"
+      responses:
+        "201":
+          description: Stores Out recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockMovement"
+
+  /subcontract-jobs:
+    get:
+      operationId: getSubcontractJobs
+      tags: [pipeline]
+      summary: List subcontract jobs
+      parameters:
+        - name: workOrderId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubcontractJob"
+    post:
+      operationId: createSubcontractJob
+      tags: [pipeline]
+      summary: Create a Subcontract Job Out (issues raw materials to a vendor)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubcontractJobBody"
+      responses:
+        "201":
+          description: Created job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubcontractJobDetail"
+
+  /subcontract-jobs/{id}:
+    get:
+      operationId: getSubcontractJob
+      tags: [pipeline]
+      summary: Get a subcontract job with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubcontractJobDetail"
+
+  /subcontract-jobs/{id}/receive:
+    post:
+      operationId: receiveSubcontractJob
+      tags: [pipeline]
+      summary: Record receipt of subcontract job (good qty + scrap), posts Stores In with computed unit cost
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiveSubcontractJobBody"
+      responses:
+        "200":
+          description: Job received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubcontractJobDetail"
+
+  /import-jobs/{id}/receive:
+    post:
+      operationId: receiveImportJobToStores
+      tags: [pipeline]
+      summary: Mark Import Job received and post Stores In with per-unit landed cost
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Import job received and posted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -4769,3 +5145,502 @@ components:
         proposalTermsAndConditions:
           type: string
           nullable: true
+
+    PurchaseRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        prNumber:
+          type: string
+        workOrderId:
+          type: integer
+        workOrderNumber:
+          type: string
+          nullable: true
+        woNumber:
+          type: string
+          nullable: true
+        customerName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [proposed, approved, rejected, cancelled]
+        notes:
+          type: string
+          nullable: true
+        approvedById:
+          type: integer
+          nullable: true
+        approvedByName:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          nullable: true
+        createdById:
+          type: integer
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        itemCount:
+          type: integer
+        totalEstimatedValue:
+          type: number
+      required:
+        - id
+        - prNumber
+        - workOrderId
+        - status
+        - createdAt
+        - updatedAt
+        - itemCount
+        - totalEstimatedValue
+
+    PurchaseRequestItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        purchaseRequestId:
+          type: integer
+        workOrderItemId:
+          type: integer
+          nullable: true
+        productId:
+          type: integer
+          nullable: true
+        productCode:
+          type: string
+          nullable: true
+        productImageUrl:
+          type: string
+          nullable: true
+        branch:
+          type: string
+          enum: [manufactured, raw, imported]
+        description:
+          type: string
+        unit:
+          type: string
+          nullable: true
+        requiredQty:
+          type: number
+        onHandQty:
+          type: number
+        shortfallQty:
+          type: number
+        estimatedUnitCost:
+          type: number
+        status:
+          type: string
+          enum: [pending, issuedFromStock, convertedToPo, convertedToImport, cancelled]
+        purchaseOrderId:
+          type: integer
+          nullable: true
+        purchaseOrderNumber:
+          type: string
+          nullable: true
+        importJobId:
+          type: integer
+          nullable: true
+        importJobNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - id
+        - purchaseRequestId
+        - branch
+        - description
+        - requiredQty
+        - onHandQty
+        - shortfallQty
+        - estimatedUnitCost
+        - status
+
+    PurchaseRequestDetail:
+      allOf:
+        - $ref: "#/components/schemas/PurchaseRequest"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/PurchaseRequestItem"
+          required:
+            - items
+
+    UpdatePurchaseRequestBody:
+      type: object
+      properties:
+        notes:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              shortfallQty:
+                type: number
+              branch:
+                type: string
+                enum: [manufactured, raw, imported]
+              estimatedUnitCost:
+                type: number
+              notes:
+                type: string
+                nullable: true
+            required:
+              - id
+
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: integer
+        itemId:
+          type: integer
+        itemCode:
+          type: string
+          nullable: true
+        itemName:
+          type: string
+          nullable: true
+        movementType:
+          type: string
+          enum: [in, out]
+        qty:
+          type: number
+        unitCost:
+          type: number
+        totalCost:
+          type: number
+        sourceType:
+          type: string
+        sourceId:
+          type: integer
+          nullable: true
+        sourceNumber:
+          type: string
+          nullable: true
+        workOrderId:
+          type: integer
+          nullable: true
+        workOrderNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdById:
+          type: integer
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - itemId
+        - movementType
+        - qty
+        - unitCost
+        - totalCost
+        - sourceType
+        - createdAt
+
+    CreateStockInBody:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        qty:
+          type: number
+        unitCost:
+          type: number
+        sourceType:
+          type: string
+          enum: [purchaseOrder, importJob, subcontractIn, production, manual, openingBalance]
+        sourceId:
+          type: integer
+          nullable: true
+        sourceNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - itemId
+        - qty
+        - unitCost
+        - sourceType
+
+    CreateStockOutBody:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        qty:
+          type: number
+        workOrderId:
+          type: integer
+          nullable: true
+        sourceType:
+          type: string
+          enum: [workOrderIssue, subcontractIssue, manual]
+        notes:
+          type: string
+          nullable: true
+      required:
+        - itemId
+        - qty
+        - sourceType
+
+    SubcontractJob:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobNumber:
+          type: string
+        workOrderId:
+          type: integer
+          nullable: true
+        workOrderNumber:
+          type: string
+          nullable: true
+        vendorName:
+          type: string
+        vendorContact:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [sentOut, received, cancelled]
+        totalVendorCost:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        sentAt:
+          type: string
+        receivedAt:
+          type: string
+          nullable: true
+        createdById:
+          type: integer
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        itemCount:
+          type: integer
+      required:
+        - id
+        - jobNumber
+        - vendorName
+        - status
+        - totalVendorCost
+        - sentAt
+        - createdAt
+        - itemCount
+
+    SubcontractJobItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        subcontractJobId:
+          type: integer
+        rawItemId:
+          type: integer
+        rawItemCode:
+          type: string
+          nullable: true
+        rawItemName:
+          type: string
+          nullable: true
+        sentQty:
+          type: number
+        sentUnitCost:
+          type: number
+        finishedItemId:
+          type: integer
+          nullable: true
+        finishedItemCode:
+          type: string
+          nullable: true
+        finishedItemName:
+          type: string
+          nullable: true
+        receivedQty:
+          type: number
+        scrapQty:
+          type: number
+        vendorChargePerUnit:
+          type: number
+        computedUnitCost:
+          type: number
+        notes:
+          type: string
+          nullable: true
+      required:
+        - id
+        - subcontractJobId
+        - rawItemId
+        - sentQty
+        - sentUnitCost
+        - receivedQty
+        - scrapQty
+        - vendorChargePerUnit
+        - computedUnitCost
+
+    SubcontractJobDetail:
+      allOf:
+        - $ref: "#/components/schemas/SubcontractJob"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/SubcontractJobItem"
+          required:
+            - items
+
+    CreateSubcontractJobBody:
+      type: object
+      properties:
+        workOrderId:
+          type: integer
+          nullable: true
+        vendorName:
+          type: string
+        vendorContact:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              rawItemId:
+                type: integer
+              sentQty:
+                type: number
+              finishedItemId:
+                type: integer
+                nullable: true
+              vendorChargePerUnit:
+                type: number
+              notes:
+                type: string
+                nullable: true
+            required:
+              - rawItemId
+              - sentQty
+      required:
+        - vendorName
+        - items
+
+    ReceiveSubcontractJobBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              receivedQty:
+                type: number
+              scrapQty:
+                type: number
+              vendorChargePerUnit:
+                type: number
+              finishedItemId:
+                type: integer
+                nullable: true
+            required:
+              - id
+              - receivedQty
+        totalVendorCost:
+          type: number
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - items
+
+    WorkOrderPnl:
+      type: object
+      properties:
+        workOrderId:
+          type: integer
+        workOrderNumber:
+          type: string
+        customerName:
+          type: string
+        status:
+          type: string
+        revenueInvoiced:
+          type: number
+        revenueOrderValue:
+          type: number
+        costStoresOut:
+          type: number
+        costSubcontract:
+          type: number
+        costImportExpenses:
+          type: number
+        directExpenses:
+          type: number
+        totalCost:
+          type: number
+        margin:
+          type: number
+        marginPercent:
+          type: number
+        invoiceCount:
+          type: integer
+        storesOutCount:
+          type: integer
+      required:
+        - workOrderId
+        - workOrderNumber
+        - customerName
+        - status
+        - revenueInvoiced
+        - revenueOrderValue
+        - costStoresOut
+        - costSubcontract
+        - costImportExpenses
+        - directExpenses
+        - totalCost
+        - margin
+        - marginPercent
+        - invoiceCount
+        - storesOutCount
+
+    WorkOrderPnlRow:
+      $ref: "#/components/schemas/WorkOrderPnl"

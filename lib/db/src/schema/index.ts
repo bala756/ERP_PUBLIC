@@ -9,3 +9,4 @@ export * from "./app-settings";
 export * from "./employees";
 export * from "./finance";
 export * from "./imports";
+export * from "./pipeline";
