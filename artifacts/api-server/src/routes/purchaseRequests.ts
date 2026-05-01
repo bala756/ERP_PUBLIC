@@ -23,6 +23,16 @@ import { logger } from "../lib/logger";
 
 const purchaseRequestsRouter = Router();
 
+// Locally-thrown error type used inside DB transactions so we can abort the
+// transaction and propagate a proper HTTP status to the caller without
+// committing partial writes.
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 const VIEW_ROLES = [
   "sales",
   "purchase",
@@ -546,6 +556,19 @@ const patchPrSchema = z.object({
       }),
     )
     .optional(),
+  addItems: z
+    .array(
+      z.object({
+        branch: z.enum(["manufactured", "raw", "imported"]),
+        description: z.string().min(1).max(500),
+        unit: z.string().min(1).max(50).optional(),
+        shortfallQty: z.number().min(0),
+        estimatedUnitCost: z.number().min(0).optional(),
+        notes: z.string().nullable().optional(),
+      }),
+    )
+    .optional(),
+  removeItemIds: z.array(z.number().int().positive()).optional(),
 });
 
 purchaseRequestsRouter.patch(
@@ -565,88 +588,136 @@ purchaseRequestsRouter.patch(
     }
     const data = parsed.data;
 
-    const [pr] = await db
-      .select()
-      .from(purchaseRequestsTable)
-      .where(eq(purchaseRequestsTable.id, id));
-    if (!pr) {
-      res.status(404).json({ error: "PR not found" });
-      return;
-    }
-    if (pr.status !== "proposed") {
-      res.status(400).json({ error: "Only proposed PRs can be edited" });
-      return;
-    }
+    // Wrap the entire mutation (notes + edit items + remove items + add items)
+    // in a single transaction. All ownership checks happen upfront so we
+    // never partially commit a PATCH that contains an invalid foreign id.
+    try {
+      await db.transaction(async (tx) => {
+        const [pr] = await tx
+          .select()
+          .from(purchaseRequestsTable)
+          .where(eq(purchaseRequestsTable.id, id));
+        if (!pr) {
+          throw new HttpError(404, "PR not found");
+        }
+        if (pr.status !== "proposed") {
+          throw new HttpError(400, "Only proposed PRs can be edited");
+        }
 
-    if (data.notes !== undefined) {
-      await db
-        .update(purchaseRequestsTable)
-        .set({ notes: data.notes ?? null, updatedAt: new Date() })
-        .where(eq(purchaseRequestsTable.id, id));
-    }
-
-    if (data.items) {
-      // Pre-validate: every passed-in item id MUST belong to this PR.
-      // Without this scoping check a caller could mutate items on a
-      // different (possibly approved) PR by passing foreign ids.
-      const ids = data.items.map((it) => it.id);
-      const owned = await db
-        .select({ id: purchaseRequestItemsTable.id })
-        .from(purchaseRequestItemsTable)
-        .where(
-          and(
-            eq(purchaseRequestItemsTable.purchaseRequestId, id),
-            inArray(purchaseRequestItemsTable.id, ids),
-          ),
-        );
-      if (owned.length !== ids.length) {
-        res
-          .status(400)
-          .json({ error: "One or more items do not belong to this PR" });
-        return;
-      }
-
-      for (const it of data.items) {
-        const update: Record<string, unknown> = {};
-        if (it.requiredQty !== undefined) {
-          update.requiredQty = it.requiredQty.toString();
-          const [existing] = await db
-            .select()
+        // ── Pre-validate every id we're about to touch belongs to this PR ──
+        const editIds = data.items?.map((it) => it.id) ?? [];
+        const removeIds = data.removeItemIds ?? [];
+        const allTouchIds = Array.from(new Set([...editIds, ...removeIds]));
+        if (allTouchIds.length > 0) {
+          const owned = await tx
+            .select({ id: purchaseRequestItemsTable.id })
             .from(purchaseRequestItemsTable)
             .where(
               and(
-                eq(purchaseRequestItemsTable.id, it.id),
                 eq(purchaseRequestItemsTable.purchaseRequestId, id),
+                inArray(purchaseRequestItemsTable.id, allTouchIds),
               ),
             );
-          if (existing) {
-            update.shortfallQty = Math.max(
-              0,
-              it.requiredQty - parseFloat(existing.onHandQty),
-            ).toString();
+          const ownedSet = new Set(owned.map((o) => o.id));
+          for (const tid of allTouchIds) {
+            if (!ownedSet.has(tid)) {
+              throw new HttpError(
+                400,
+                "One or more items do not belong to this PR",
+              );
+            }
           }
         }
-        // Direct shortfall override takes precedence (it's the qty that
-        // actually drives PO/import line quantities at approve time).
-        if (it.shortfallQty !== undefined) {
-          update.shortfallQty = it.shortfallQty.toString();
+
+        if (data.notes !== undefined) {
+          await tx
+            .update(purchaseRequestsTable)
+            .set({ notes: data.notes ?? null, updatedAt: new Date() })
+            .where(eq(purchaseRequestsTable.id, id));
         }
-        if (it.estimatedUnitCost !== undefined) {
-          update.estimatedUnitCost = it.estimatedUnitCost.toString();
+
+        if (data.items) {
+          for (const it of data.items) {
+            const update: Record<string, unknown> = {};
+            if (it.requiredQty !== undefined) {
+              update.requiredQty = it.requiredQty.toString();
+              const [existing] = await tx
+                .select()
+                .from(purchaseRequestItemsTable)
+                .where(
+                  and(
+                    eq(purchaseRequestItemsTable.id, it.id),
+                    eq(purchaseRequestItemsTable.purchaseRequestId, id),
+                  ),
+                );
+              if (existing) {
+                update.shortfallQty = Math.max(
+                  0,
+                  it.requiredQty - parseFloat(existing.onHandQty),
+                ).toString();
+              }
+            }
+            // Direct shortfall override takes precedence (it's the qty that
+            // actually drives PO/import line quantities at approve time).
+            if (it.shortfallQty !== undefined) {
+              update.shortfallQty = it.shortfallQty.toString();
+            }
+            if (it.estimatedUnitCost !== undefined) {
+              update.estimatedUnitCost = it.estimatedUnitCost.toString();
+            }
+            if (it.notes !== undefined) update.notes = it.notes;
+            if (Object.keys(update).length > 0) {
+              await tx
+                .update(purchaseRequestItemsTable)
+                .set(update)
+                .where(
+                  and(
+                    eq(purchaseRequestItemsTable.id, it.id),
+                    eq(purchaseRequestItemsTable.purchaseRequestId, id),
+                  ),
+                );
+            }
+          }
         }
-        if (it.notes !== undefined) update.notes = it.notes;
-        if (Object.keys(update).length > 0) {
-          await db
-            .update(purchaseRequestItemsTable)
-            .set(update)
+
+        if (removeIds.length > 0) {
+          await tx
+            .delete(purchaseRequestItemsTable)
             .where(
               and(
-                eq(purchaseRequestItemsTable.id, it.id),
                 eq(purchaseRequestItemsTable.purchaseRequestId, id),
+                inArray(purchaseRequestItemsTable.id, removeIds),
               ),
             );
         }
+
+        // Append manual line items. These are entered by the buyer/planner
+        // with no BOM/product link (productId=null, onHandQty=0), so
+        // shortfallQty equals requiredQty — the full quantity drives
+        // PO/import line creation when the PR is approved.
+        if (data.addItems && data.addItems.length > 0) {
+          const toInsert = data.addItems.map((it) => ({
+            purchaseRequestId: id,
+            workOrderItemId: null,
+            productId: null,
+            branch: it.branch,
+            description: it.description,
+            unit: it.unit ?? "pcs",
+            requiredQty: it.shortfallQty.toString(),
+            onHandQty: "0",
+            shortfallQty: it.shortfallQty.toString(),
+            estimatedUnitCost: (it.estimatedUnitCost ?? 0).toString(),
+            notes: it.notes ?? null,
+          }));
+          await tx.insert(purchaseRequestItemsTable).values(toInsert);
+        }
+      });
+    } catch (err) {
+      if (err instanceof HttpError) {
+        res.status(err.status).json({ error: err.message });
+        return;
       }
+      throw err;
     }
 
     res.json({ ok: true });

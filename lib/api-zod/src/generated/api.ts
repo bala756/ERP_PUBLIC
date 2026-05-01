@@ -4260,6 +4260,23 @@ export const UpdatePurchaseRequestBody = zod.object({
       }),
     )
     .optional(),
+  addItems: zod
+    .array(
+      zod.object({
+        branch: zod.enum(["manufactured", "raw", "imported"]),
+        description: zod.string(),
+        unit: zod.string().optional(),
+        shortfallQty: zod.number(),
+        estimatedUnitCost: zod.number().optional(),
+        notes: zod.string().nullish(),
+      }),
+    )
+    .optional()
+    .describe("Manual line items to append to a proposed PR."),
+  removeItemIds: zod
+    .array(zod.number())
+    .optional()
+    .describe("IDs of existing PR items to delete from a proposed PR."),
 });
 
 export const UpdatePurchaseRequestResponse = zod

@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   ClipboardList, ExternalLink, CheckCircle2, XCircle,
-  Factory, Package, Ship,
+  Factory, Package, Ship, Trash2, Plus,
 } from "lucide-react";
 
 function formatDate(iso: string) {
@@ -226,6 +226,20 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
   const [edits, setEdits] = useState<
     Record<number, { qty?: string; cost?: string }>
   >({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [newItem, setNewItem] = useState<{
+    branch: PurchaseRequestItemBranch;
+    description: string;
+    unit: string;
+    shortfallQty: string;
+    estimatedUnitCost: string;
+  }>({
+    branch: PurchaseRequestItemBranch.raw,
+    description: "",
+    unit: "pcs",
+    shortfallQty: "1",
+    estimatedUnitCost: "0",
+  });
   const approve = useApprovePurchaseRequest();
   const reject = useRejectPurchaseRequest();
   const update = useUpdatePurchaseRequest();
@@ -256,6 +270,66 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
           };
         })
     : [];
+
+  const onRemoveItem = async (itemId: number) => {
+    if (!window.confirm("Remove this line item from the PR?")) return;
+    await update.mutateAsync(
+      { id, data: { removeItemIds: [itemId] } },
+      {
+        onSuccess: () => {
+          toast({ title: "Item removed" });
+          qc.invalidateQueries();
+        },
+        onError: (e: unknown) => {
+          const msg = e instanceof Error ? e.message : "Remove failed";
+          toast({ title: "Failed to remove", description: msg, variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  const onAddItem = async () => {
+    const qty = parseFloat(newItem.shortfallQty);
+    const cost = parseFloat(newItem.estimatedUnitCost);
+    if (!newItem.description.trim() || !Number.isFinite(qty) || qty <= 0) {
+      toast({ title: "Description and positive quantity are required", variant: "destructive" });
+      return;
+    }
+    await update.mutateAsync(
+      {
+        id,
+        data: {
+          addItems: [
+            {
+              branch: newItem.branch,
+              description: newItem.description.trim(),
+              unit: newItem.unit || "pcs",
+              shortfallQty: qty,
+              estimatedUnitCost: Number.isFinite(cost) ? cost : 0,
+            },
+          ],
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Line item added" });
+          qc.invalidateQueries();
+          setAddOpen(false);
+          setNewItem({
+            branch: PurchaseRequestItemBranch.raw,
+            description: "",
+            unit: "pcs",
+            shortfallQty: "1",
+            estimatedUnitCost: "0",
+          });
+        },
+        onError: (e: unknown) => {
+          const msg = e instanceof Error ? e.message : "Add failed";
+          toast({ title: "Failed to add", description: msg, variant: "destructive" });
+        },
+      },
+    );
+  };
 
   const onSaveEdits = async () => {
     if (dirtyItems.length === 0) return;
@@ -346,6 +420,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                   <TableHead className="text-right">Est. Unit Cost (editable)</TableHead>
                   <TableHead>Vendor (for PO)</TableHead>
                   <TableHead>Status</TableHead>
+                  {pr.status === "proposed" && <TableHead className="w-12"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -423,12 +498,120 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">{it.status}</Badge>
                     </TableCell>
+                    {pr.status === "proposed" && (
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => onRemoveItem(it.id)}
+                          disabled={update.isPending || approve.isPending || reject.isPending}
+                          title="Remove line item"
+                          data-testid={`button-remove-item-${it.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+
+            {pr.status === "proposed" && (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddOpen(true)}
+                  disabled={update.isPending || approve.isPending || reject.isPending}
+                  data-testid="button-add-pr-item"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Line Item
+                </Button>
+              </div>
+            )}
           </>
         )}
+
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Line Item</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Branch</Label>
+                <Select
+                  value={newItem.branch}
+                  onValueChange={(v) => setNewItem({ ...newItem, branch: v as PurchaseRequestItemBranch })}
+                >
+                  <SelectTrigger data-testid="select-add-branch">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PurchaseRequestItemBranch.manufactured}>Manufactured (in-house)</SelectItem>
+                    <SelectItem value={PurchaseRequestItemBranch.raw}>Raw (local PO)</SelectItem>
+                    <SelectItem value={PurchaseRequestItemBranch.imported}>Imported</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Description</Label>
+                <Input
+                  value={newItem.description}
+                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                  placeholder="e.g. Stainless steel sheet 2mm"
+                  data-testid="input-add-description"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Unit</Label>
+                  <Input
+                    value={newItem.unit}
+                    onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
+                    placeholder="pcs"
+                    data-testid="input-add-unit"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Quantity</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newItem.shortfallQty}
+                    onChange={(e) => setNewItem({ ...newItem, shortfallQty: e.target.value })}
+                    data-testid="input-add-qty"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Estimated Unit Cost (₹)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newItem.estimatedUnitCost}
+                  onChange={(e) => setNewItem({ ...newItem, estimatedUnitCost: e.target.value })}
+                  data-testid="input-add-cost"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button
+                onClick={onAddItem}
+                disabled={update.isPending}
+                data-testid="button-confirm-add-item"
+              >
+                Add
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={onClose}>Close</Button>
@@ -437,7 +620,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
               <Button
                 variant="outline"
                 onClick={onSaveEdits}
-                disabled={update.isPending || dirtyItems.length === 0}
+                disabled={update.isPending || approve.isPending || reject.isPending || dirtyItems.length === 0}
                 data-testid="button-save-pr-edits"
               >
                 Save Edits{dirtyItems.length > 0 ? ` (${dirtyItems.length})` : ""}
@@ -445,7 +628,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
               <Button
                 variant="outline"
                 onClick={onReject}
-                disabled={reject.isPending}
+                disabled={reject.isPending || update.isPending || approve.isPending}
                 data-testid="button-reject-pr"
               >
                 <XCircle className="mr-2 h-4 w-4" />
@@ -453,7 +636,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
               </Button>
               <Button
                 onClick={onApprove}
-                disabled={approve.isPending || dirtyItems.length > 0}
+                disabled={approve.isPending || update.isPending || reject.isPending || dirtyItems.length > 0}
                 data-testid="button-approve-pr"
                 title={dirtyItems.length > 0 ? "Save edits before approving" : ""}
               >

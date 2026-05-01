@@ -5514,6 +5514,35 @@ components:
                 nullable: true
             required:
               - id
+        addItems:
+          type: array
+          description: Manual line items to append to a proposed PR.
+          items:
+            type: object
+            properties:
+              branch:
+                type: string
+                enum: [manufactured, raw, imported]
+              description:
+                type: string
+              unit:
+                type: string
+              shortfallQty:
+                type: number
+              estimatedUnitCost:
+                type: number
+              notes:
+                type: string
+                nullable: true
+            required:
+              - branch
+              - description
+              - shortfallQty
+        removeItemIds:
+          type: array
+          description: IDs of existing PR items to delete from a proposed PR.
+          items:
+            type: integer
 
     StockMovement:
       type: object

@@ -1695,9 +1695,31 @@ export type UpdatePurchaseRequestBodyItemsItem = {
   notes?: string | null;
 };
 
+export type UpdatePurchaseRequestBodyAddItemsItemBranch =
+  (typeof UpdatePurchaseRequestBodyAddItemsItemBranch)[keyof typeof UpdatePurchaseRequestBodyAddItemsItemBranch];
+
+export const UpdatePurchaseRequestBodyAddItemsItemBranch = {
+  manufactured: "manufactured",
+  raw: "raw",
+  imported: "imported",
+} as const;
+
+export type UpdatePurchaseRequestBodyAddItemsItem = {
+  branch: UpdatePurchaseRequestBodyAddItemsItemBranch;
+  description: string;
+  unit?: string;
+  shortfallQty: number;
+  estimatedUnitCost?: number;
+  notes?: string | null;
+};
+
 export interface UpdatePurchaseRequestBody {
   notes?: string | null;
   items?: UpdatePurchaseRequestBodyItemsItem[];
+  /** Manual line items to append to a proposed PR. */
+  addItems?: UpdatePurchaseRequestBodyAddItemsItem[];
+  /** IDs of existing PR items to delete from a proposed PR. */
+  removeItemIds?: number[];
 }
 
 export type StockMovementMovementType =
