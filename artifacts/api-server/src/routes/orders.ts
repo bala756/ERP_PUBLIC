@@ -18,6 +18,8 @@ import {
   inventoryItemsTable,
   importJobsTable,
   importJobItemsTable,
+  purchaseRequestsTable,
+  purchaseRequestItemsTable,
 } from "@workspace/db";
 import { eq, and, or, ne, desc, sql, inArray, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -288,6 +290,14 @@ const createPOSchema = z.object({
       }),
     )
     .min(1, "At least one product line item is required"),
+  // Optional list of PR line item ids being fulfilled by this PO. When set,
+  // each PR item is validated to belong to a PR for the same workOrderId,
+  // be in 'pending' status, and on raw/manufactured branch (not imported).
+  // After PO insert, those PR items are flipped to convertedToPo and linked
+  // back to this PO. Powers the "Create PO from PR" buyer flow.
+  purchaseRequestItemIds: z
+    .array(z.number().int().positive())
+    .optional(),
 });
 
 const updatePOSchema = createPOSchema.omit({ workOrderId: true }).partial();
@@ -789,7 +799,7 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
     return;
   }
 
-  const { lineItems, ...rest } = parsed.data;
+  const { lineItems, purchaseRequestItemIds, ...rest } = parsed.data;
 
   if (rest.workOrderItemId) {
     const [itemOwnership] = await db
@@ -804,6 +814,76 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
     if (!itemOwnership) {
       res.status(400).json({ error: "Item does not belong to the specified work order" });
       return;
+    }
+  }
+
+  // Validate any PR item links upfront so we never insert a PO and then
+  // fail to link the PR side. Each item must:
+  //  - exist
+  //  - belong to a PR that is currently 'approved' (the approval workflow
+  //    must have happened — a buyer cannot bypass it by raising a PO from
+  //    a 'proposed' or 'rejected' PR)
+  //  - belong to a PR for the same workOrderId (no cross-WO mixing)
+  //  - currently be 'pending' (not already converted/issued/cancelled)
+  //  - be on the 'raw' or 'manufactured' branch (imported items go through
+  //    Import Jobs, not POs — silently allowing them would create an invalid
+  //    PR↔PO link that contradicts the schema's intent)
+  let prItemsToLink: (typeof purchaseRequestItemsTable.$inferSelect)[] = [];
+  if (purchaseRequestItemIds && purchaseRequestItemIds.length > 0) {
+    const uniqueIds = Array.from(new Set(purchaseRequestItemIds));
+    prItemsToLink = await db
+      .select()
+      .from(purchaseRequestItemsTable)
+      .where(inArray(purchaseRequestItemsTable.id, uniqueIds));
+    if (prItemsToLink.length !== uniqueIds.length) {
+      res
+        .status(400)
+        .json({ error: "One or more purchase request items do not exist" });
+      return;
+    }
+    const prIds = Array.from(
+      new Set(prItemsToLink.map((it) => it.purchaseRequestId)),
+    );
+    const prRows = await db
+      .select()
+      .from(purchaseRequestsTable)
+      .where(inArray(purchaseRequestsTable.id, prIds));
+    const prById = new Map(prRows.map((pr) => [pr.id, pr] as const));
+    for (const pr of prRows) {
+      if (pr.workOrderId !== rest.workOrderId) {
+        res.status(400).json({
+          error:
+            "Purchase request items must belong to a PR for the same Work Order as this PO",
+        });
+        return;
+      }
+      if (pr.status !== "approved") {
+        res.status(400).json({
+          error: `Purchase request ${pr.prNumber} is not approved (status=${pr.status}); a PO can only be raised from an approved PR`,
+        });
+        return;
+      }
+    }
+    // Defense-in-depth: every item must map to a PR we just validated.
+    for (const it of prItemsToLink) {
+      if (!prById.has(it.purchaseRequestId)) {
+        res.status(400).json({
+          error: `PR item ${it.id} has no resolvable parent PR`,
+        });
+        return;
+      }
+      if (it.status !== "pending") {
+        res.status(400).json({
+          error: `PR item ${it.id} is not pending (status=${it.status}) and cannot be converted to a PO`,
+        });
+        return;
+      }
+      if (it.branch === "imported") {
+        res.status(400).json({
+          error: `PR item ${it.id} is on the 'imported' branch; create an Import Job instead of a PO`,
+        });
+        return;
+      }
     }
   }
 
@@ -838,45 +918,92 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
   const poNumber = await generatePoNumber();
   const userId = req.session.userId;
 
-  const [po] = await db
-    .insert(purchaseOrdersTable)
-    .values({
-      ...rest,
-      poNumber,
-      quotedAmount: rest.quotedAmount.toString(),
-      poAmount: rest.poAmount.toString(),
-      requiresCfoApproval,
-      requiresDirectorApproval,
-      status: requiresDirectorApproval ? "pendingDirectorApproval" : "pendingApproval",
-      createdById: userId,
-    })
-    .returning();
+  // Wrap the PO insert + line items + PR-link update in a single transaction
+  // so a race between concurrent buyers (both picking the same PR items)
+  // can't double-convert the same PR items to two POs. The PR-link UPDATE
+  // additionally guards `status='pending'` in its WHERE clause, and we
+  // assert the affected row count matches what we expected — if another
+  // request already flipped any of these PR items, we abort the whole
+  // transaction so neither PO nor partial PR conversions are committed.
+  let poId: number;
+  try {
+    poId = await db.transaction(async (tx) => {
+      const [poRow] = await tx
+        .insert(purchaseOrdersTable)
+        .values({
+          ...rest,
+          poNumber,
+          quotedAmount: rest.quotedAmount.toString(),
+          poAmount: rest.poAmount.toString(),
+          requiresCfoApproval,
+          requiresDirectorApproval,
+          status: requiresDirectorApproval
+            ? "pendingDirectorApproval"
+            : "pendingApproval",
+          createdById: userId,
+        })
+        .returning();
 
-  if (lineItems.length > 0) {
-    await db.insert(poLineItemsTable).values(
-      lineItems.map((li) => ({
-        purchaseOrderId: po.id,
-        productId: li.productId ?? null,
-        productCode: li.productCode ?? null,
-        productImageUrl: li.productImageUrl ?? null,
-        hsnCode: li.hsnCode ?? null,
-        unit: li.unit ?? null,
-        description: li.description,
-        qty: li.qty.toString(),
-        unitPrice: li.unitPrice.toString(),
-        gstRate: li.gstRate.toString(),
-      })),
-    );
+      if (lineItems.length > 0) {
+        await tx.insert(poLineItemsTable).values(
+          lineItems.map((li) => ({
+            purchaseOrderId: poRow.id,
+            productId: li.productId ?? null,
+            productCode: li.productCode ?? null,
+            productImageUrl: li.productImageUrl ?? null,
+            hsnCode: li.hsnCode ?? null,
+            unit: li.unit ?? null,
+            description: li.description,
+            qty: li.qty.toString(),
+            unitPrice: li.unitPrice.toString(),
+            gstRate: li.gstRate.toString(),
+          })),
+        );
+      }
+
+      if (prItemsToLink.length > 0) {
+        const ids = prItemsToLink.map((it) => it.id);
+        const updated = await tx
+          .update(purchaseRequestItemsTable)
+          .set({ status: "convertedToPo", purchaseOrderId: poRow.id })
+          .where(
+            and(
+              inArray(purchaseRequestItemsTable.id, ids),
+              eq(purchaseRequestItemsTable.status, "pending"),
+            ),
+          )
+          .returning({ id: purchaseRequestItemsTable.id });
+        if (updated.length !== ids.length) {
+          // Another writer flipped one or more rows out from under us;
+          // throwing rolls back the PO + line items inserted above.
+          throw new Error(
+            "PR_ITEM_RACE: one or more purchase request items were converted by another request; please retry",
+          );
+        }
+      }
+
+      await tx
+        .update(workOrderItemsTable)
+        .set({ currentStep: "poCreated" })
+        .where(
+          rest.workOrderItemId
+            ? eq(workOrderItemsTable.id, rest.workOrderItemId)
+            : eq(workOrderItemsTable.workOrderId, rest.workOrderId),
+        );
+
+      return poRow.id;
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to create PO";
+    if (msg.startsWith("PR_ITEM_RACE")) {
+      res.status(409).json({ error: msg });
+      return;
+    }
+    req.log.error({ err }, "Failed to create purchase order");
+    res.status(500).json({ error: "Failed to create purchase order" });
+    return;
   }
-
-  await db
-    .update(workOrderItemsTable)
-    .set({ currentStep: "poCreated" })
-    .where(
-      rest.workOrderItemId
-        ? eq(workOrderItemsTable.id, rest.workOrderItemId)
-        : eq(workOrderItemsTable.workOrderId, rest.workOrderId),
-    );
+  const po = { id: poId };
 
   const [fullPO] = await db
     .select()

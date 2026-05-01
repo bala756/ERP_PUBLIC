@@ -169,6 +169,8 @@ async function getPrItemTotals(
 function serializePrItem(
   item: typeof purchaseRequestItemsTable.$inferSelect & {
     product?: { name: string; itemCode: string | null; unit: string } | null;
+    purchaseOrderNumber?: string | null;
+    importJobNumber?: string | null;
   },
   showPrices: boolean = true,
 ) {
@@ -189,7 +191,9 @@ function serializePrItem(
     estimatedUnitCost: showPrices ? parseFloat(item.estimatedUnitCost) : null,
     status: item.status,
     purchaseOrderId: item.purchaseOrderId ?? null,
+    purchaseOrderNumber: item.purchaseOrderNumber ?? null,
     importJobId: item.importJobId ?? null,
+    importJobNumber: item.importJobNumber ?? null,
     notes: item.notes ?? null,
   };
 }
@@ -456,6 +460,33 @@ async function buildPrDetail(prId: number, viewerRole: string | null = null) {
     0,
   );
 
+  // Resolve PO number / Import Job number per linked PR item so the PR detail
+  // page can display "raised against PO-25-0007" etc. without a second
+  // round-trip from the client. Done as two batched lookups instead of joins
+  // to keep the items query small and aligned with the existing pattern.
+  const poIds = items
+    .map((r) => r.item.purchaseOrderId)
+    .filter((id): id is number => typeof id === "number" && id > 0);
+  const ijIds = items
+    .map((r) => r.item.importJobId)
+    .filter((id): id is number => typeof id === "number" && id > 0);
+  const poNumberMap = new Map<number, string>();
+  if (poIds.length > 0) {
+    const poRows = await db
+      .select({ id: purchaseOrdersTable.id, poNumber: purchaseOrdersTable.poNumber })
+      .from(purchaseOrdersTable)
+      .where(inArray(purchaseOrdersTable.id, poIds));
+    for (const r of poRows) poNumberMap.set(r.id, r.poNumber);
+  }
+  const ijNumberMap = new Map<number, string>();
+  if (ijIds.length > 0) {
+    const ijRows = await db
+      .select({ id: importJobsTable.id, jobNumber: importJobsTable.jobNumber })
+      .from(importJobsTable)
+      .where(inArray(importJobsTable.id, ijIds));
+    for (const r of ijRows) ijNumberMap.set(r.id, r.jobNumber);
+  }
+
   const woSummary: { woNumber: string; customerName: string } | null = row.wo
     ? { woNumber: row.wo.woNumber, customerName: row.wo.customerName }
     : null;
@@ -481,6 +512,12 @@ async function buildPrDetail(prId: number, viewerRole: string | null = null) {
                 itemCode: r.product.itemCode,
                 unit: r.product.unit,
               }
+            : null,
+          purchaseOrderNumber: r.item.purchaseOrderId
+            ? (poNumberMap.get(r.item.purchaseOrderId) ?? null)
+            : null,
+          importJobNumber: r.item.importJobId
+            ? (ijNumberMap.get(r.item.importJobId) ?? null)
             : null,
         },
         showPrices,

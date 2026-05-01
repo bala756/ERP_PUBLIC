@@ -2310,6 +2310,12 @@ export const CreatePurchaseOrderBody = zod.object({
       }),
     )
     .optional(),
+  purchaseRequestItemIds: zod
+    .array(zod.number())
+    .optional()
+    .describe(
+      "Optional list of purchase_request_items.id values that this PO is fulfilling. When supplied,\neach referenced PR item must belong to a PR for the same workOrderId, must currently be\n'pending', and must be on the 'raw' or 'manufactured' branch (imported items go through\nan Import Job, not a PO). On success, each linked PR item's status is set to\n'convertedToPo' and its purchaseOrderId is set to the new PO. Used by the\n'Create PO from PR' flow so buyers don't have to re-enter PR lines.\n",
+    ),
 });
 
 /**

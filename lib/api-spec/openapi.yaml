@@ -3697,6 +3697,17 @@ components:
                 type: number
             required:
               - description
+        purchaseRequestItemIds:
+          type: array
+          description: |
+            Optional list of purchase_request_items.id values that this PO is fulfilling. When supplied,
+            each referenced PR item must belong to a PR for the same workOrderId, must currently be
+            'pending', and must be on the 'raw' or 'manufactured' branch (imported items go through
+            an Import Job, not a PO). On success, each linked PR item's status is set to
+            'convertedToPo' and its purchaseOrderId is set to the new PO. Used by the
+            'Create PO from PR' flow so buyers don't have to re-enter PR lines.
+          items:
+            type: integer
       required:
         - workOrderId
         - supplierName
