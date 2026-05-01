@@ -459,10 +459,13 @@ subcontractJobsRouter.post(
         );
       if (!existing) continue;
 
-      const finishedItemId = it.finishedItemId ?? existing.finishedItemId;
+      // Default to the raw item if neither create-time nor receive-time
+      // payload provided a finished item ("same as raw" semantics).
+      const finishedItemId =
+        it.finishedItemId ?? existing.finishedItemId ?? existing.rawItemId;
       if (!finishedItemId) {
         res.status(400).json({
-          error: `Line ${it.id}: finishedItemId required to receive`,
+          error: `Line ${it.id}: cannot determine finishedItemId`,
         });
         return;
       }
