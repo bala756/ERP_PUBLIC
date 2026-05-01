@@ -47,7 +47,7 @@ const passwordSchema = z
 
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
-const PRINT_TEMPLATE_ADMIN_ROLES = ["admin", "director", "cfo"];
+const PRINT_TEMPLATE_ADMIN_ROLES = ["admin"];
 
 export default function Settings() {
   const { user } = useAuth();

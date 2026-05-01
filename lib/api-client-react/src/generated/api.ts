@@ -45,6 +45,7 @@ import type {
   CreateWorkOrderBody,
   CreditorsDebtors,
   DashboardSummary,
+  DeleteInventoryItem200,
   DepartmentRecord,
   Employee,
   EmployeeDetail,
@@ -3950,6 +3951,90 @@ export const useUpdateInventoryItem = <
   TContext
 > => {
   return useMutation(getUpdateInventoryItemMutationOptions(options));
+};
+
+/**
+ * @summary Delete an inventory item (admin only). Soft-deletes if it has stock history.
+ */
+export const getDeleteInventoryItemUrl = (id: number) => {
+  return `/api/inventory/items/${id}`;
+};
+
+export const deleteInventoryItem = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteInventoryItem200> => {
+  return customFetch<DeleteInventoryItem200>(getDeleteInventoryItemUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteInventoryItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteInventoryItem>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteInventoryItem>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteInventoryItem>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteInventoryItem(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteInventoryItem>>
+>;
+
+export type DeleteInventoryItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an inventory item (admin only). Soft-deletes if it has stock history.
+ */
+export const useDeleteInventoryItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteInventoryItem>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteInventoryItem>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteInventoryItemMutationOptions(options));
 };
 
 /**

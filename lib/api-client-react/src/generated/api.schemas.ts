@@ -1585,6 +1585,12 @@ export type GetInventoryItemsParams = {
   search?: string;
 };
 
+export type DeleteInventoryItem200 = {
+  ok: boolean;
+  deactivated: boolean;
+  id: number;
+};
+
 export type GetEmployeesParams = {
   department?: string;
   isActive?: boolean;

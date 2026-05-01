@@ -2433,6 +2433,19 @@ export const UpdateInventoryItemResponse = zod.object({
 });
 
 /**
+ * @summary Delete an inventory item (admin only). Soft-deletes if it has stock history.
+ */
+export const DeleteInventoryItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteInventoryItemResponse = zod.object({
+  ok: zod.boolean(),
+  deactivated: zod.boolean(),
+  id: zod.number(),
+});
+
+/**
  * @summary Get full stock ledger for an item
  */
 export const GetItemLedgerParams = zod.object({

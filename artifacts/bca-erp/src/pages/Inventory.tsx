@@ -4,6 +4,7 @@ import {
   useGetInventoryItems,
   useCreateInventoryItem,
   useUpdateInventoryItem,
+  useDeleteInventoryItem,
   useRecordStockTransaction,
   useGetInventoryDashboard,
   getGetInventoryItemsQueryKey,
@@ -33,7 +34,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Package, Plus, ArrowDownCircle, ArrowUpCircle,
-  AlertTriangle, BookOpen, LayoutDashboard, Search,
+  AlertTriangle, BookOpen, LayoutDashboard, Search, Trash2, ShieldAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -42,7 +43,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { objectPathToUrl } from "@/lib/uploadFile";
 
 const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"];
-const ITEM_MGMT_ROLES = ["manager", "director", "admin", "cfo"];
+// Product Master CRUD is admin-only by spec.
+const ITEM_MGMT_ROLES = ["admin"];
 const CATEGORIES = ["rawMaterial", "wip", "finishedGoods"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
   rawMaterial: "Raw Material",
@@ -517,6 +519,16 @@ export default function Inventory() {
     },
   });
 
+  const deleteItem = useDeleteInventoryItem({
+    mutation: {
+      onSuccess: (resp: { deactivated?: boolean }) => {
+        invalidateAll();
+        toast({ title: resp?.deactivated ? "Item deactivated (had stock history)" : "Item deleted" });
+      },
+      onError: (err: Error) => toast({ title: err.message ?? "Failed to delete item", variant: "destructive" }),
+    },
+  });
+
   const recordTx = useRecordStockTransaction({
     mutation: {
       onSuccess: () => {
@@ -550,6 +562,15 @@ export default function Inventory() {
           </Button>
         )}
       </div>
+
+      {!canManageItems && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <strong>Admin only.</strong> Product Master entries (create, edit, delete) can only be managed by an administrator. You can still view items, view ledgers, and record stock transactions if your role allows.
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -721,14 +742,29 @@ export default function Inventory() {
                         <BookOpen className="h-4 w-4" />
                       </Button>
                       {canManageItems && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => { setEditingItem(item); setItemDialogOpen(true); }}
-                          title="Edit"
-                        >
-                          Edit
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => { setEditingItem(item); setItemDialogOpen(true); }}
+                            title="Edit"
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-700 hover:text-red-900 hover:bg-red-50"
+                            title="Delete"
+                            onClick={() => {
+                              if (window.confirm(`Delete product "${item.name}"? Items with stock history will be deactivated instead.`)) {
+                                deleteItem.mutate({ id: item.id });
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </TableCell>

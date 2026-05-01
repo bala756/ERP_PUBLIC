@@ -967,6 +967,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/InventoryItem"
+    delete:
+      operationId: deleteInventoryItem
+      tags: [inventory]
+      summary: Delete an inventory item (admin only). Soft-deletes if it has stock history.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted (or deactivated if it has stock history)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  deactivated:
+                    type: boolean
+                  id:
+                    type: integer
+                required: [ok, deactivated, id]
 
   /inventory/items/{id}/ledger:
     get:

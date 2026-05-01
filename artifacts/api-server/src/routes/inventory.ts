@@ -16,7 +16,10 @@ const inventoryRouter = Router();
 
 const VIEW_ROLES = ["stores", "manager", "director", "admin", "cfo", "purchase", "accounts", "production"] as const;
 const WRITE_ROLES = ["stores", "manager", "director", "admin", "cfo"] as const;
-const ITEM_MGMT_ROLES = ["manager", "director", "admin", "cfo"] as const;
+// Product Master CRUD is admin-only by spec.
+const ITEM_MGMT_ROLES = ["admin"] as const;
+// BOM management retains the broader manager-class privileges from before.
+const BOM_MGMT_ROLES = ["manager", "director", "admin", "cfo"] as const;
 
 const createItemSchema = z.object({
   itemCode: z.string().max(50).optional(),
@@ -314,6 +317,36 @@ inventoryRouter.patch("/inventory/items/:id", requireRole(...ITEM_MGMT_ROLES), a
   if (!updated) { res.status(404).json({ error: "Item not found" }); return; }
   const balance = await getStockBalance(id);
   res.json(serializeItem(updated, balance));
+});
+
+inventoryRouter.delete("/inventory/items/:id", requireRole(...ITEM_MGMT_ROLES), async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  // Soft-delete by deactivating when there are stock transactions; hard-delete otherwise.
+  const [txn] = await db
+    .select({ id: stockTransactionsTable.id })
+    .from(stockTransactionsTable)
+    .where(eq(stockTransactionsTable.itemId, id))
+    .limit(1);
+
+  if (txn) {
+    const [updated] = await db
+      .update(inventoryItemsTable)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(inventoryItemsTable.id, id))
+      .returning();
+    if (!updated) { res.status(404).json({ error: "Item not found" }); return; }
+    res.json({ ok: true, deactivated: true, id });
+    return;
+  }
+
+  const [deleted] = await db
+    .delete(inventoryItemsTable)
+    .where(eq(inventoryItemsTable.id, id))
+    .returning();
+  if (!deleted) { res.status(404).json({ error: "Item not found" }); return; }
+  res.json({ ok: true, deactivated: false, id });
 });
 
 inventoryRouter.post("/inventory/transactions", requireRole(...WRITE_ROLES), async (req, res) => {
@@ -717,7 +750,7 @@ inventoryRouter.patch("/bom/:id", requireRole(...WRITE_ROLES), async (req, res) 
   });
 });
 
-inventoryRouter.delete("/bom/:id", requireRole(...ITEM_MGMT_ROLES), async (req, res) => {
+inventoryRouter.delete("/bom/:id", requireRole(...BOM_MGMT_ROLES), async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 

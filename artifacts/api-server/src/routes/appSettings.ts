@@ -9,7 +9,7 @@ import {
 
 const router: IRouter = Router();
 
-const ADMIN_ROLES = ["admin", "director", "cfo"] as const;
+const ADMIN_ROLES = ["admin"] as const;
 const SETTINGS_ID = 1;
 
 function serialize(row: typeof appSettingsTable.$inferSelect) {
