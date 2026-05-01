@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   useGetPurchaseRequests,
   useGetPurchaseRequest,
@@ -55,7 +56,17 @@ const BRANCH_LABELS: Record<string, string> = {
   imported: "Imported",
 };
 
+// Mirror of the server-side PRICE_VIEW_ROLES set. Used purely for client
+// rendering as defence-in-depth — the server still strips price fields
+// (estimatedUnitCost, totalEstimatedValue) for any role outside this set.
+const PRICE_VIEW_ROLES = new Set(["manager", "director", "admin", "cfo", "accounts"]);
+function canViewPrices(role: string | undefined | null): boolean {
+  return !!role && PRICE_VIEW_ROLES.has(role);
+}
+
 export default function PurchaseRequests() {
+  const { user } = useAuth();
+  const showPrices = canViewPrices(user?.role);
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
@@ -143,9 +154,10 @@ export default function PurchaseRequests() {
                 <TableHead>Work Order</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Est. Value</TableHead>
+                {showPrices && <TableHead className="text-right">Est. Value</TableHead>}
+                <TableHead>Raised By</TableHead>
+                <TableHead>Raised On</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
                 <TableHead className="w-32" />
               </TableRow>
             </TableHeader>
@@ -153,12 +165,14 @@ export default function PurchaseRequests() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={8}><Skeleton className="h-6 w-full" /></TableCell>
+                    <TableCell colSpan={showPrices ? 9 : 8}>
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
                   </TableRow>
                 ))
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={showPrices ? 9 : 8} className="text-center text-muted-foreground py-12">
                     No purchase requests yet. Release a Work Order to generate one.
                   </TableCell>
                 </TableRow>
@@ -183,14 +197,22 @@ export default function PurchaseRequests() {
                       </TableCell>
                       <TableCell>{pr.customerName ?? "—"}</TableCell>
                       <TableCell className="text-right">{pr.itemCount ?? 0}</TableCell>
-                      <TableCell className="text-right">
-                        ₹{(pr.totalEstimatedValue ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={v.cls}>{v.label}</Badge>
+                      {showPrices && (
+                        <TableCell className="text-right" data-testid={`cell-pr-est-value-${pr.id}`}>
+                          ₹{(pr.totalEstimatedValue ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                        </TableCell>
+                      )}
+                      <TableCell
+                        className="font-medium"
+                        data-testid={`cell-pr-raised-by-${pr.id}`}
+                      >
+                        {pr.createdByName ?? "—"}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(pr.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={v.cls}>{v.label}</Badge>
                       </TableCell>
                       <TableCell>
                         <Button
@@ -219,6 +241,8 @@ export default function PurchaseRequests() {
 }
 
 function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => void }) {
+  const { user } = useAuth();
+  const showPrices = canViewPrices(user?.role);
   const { data: pr, isLoading } = useGetPurchaseRequest(id);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -244,30 +268,36 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
   const reject = useRejectPurchaseRequest();
   const update = useUpdatePurchaseRequest();
 
+  // Build PATCH payload. For raiser-only roles (showPrices=false) we never
+  // include estimatedUnitCost so we cannot accidentally overwrite hidden
+  // server-side costs to 0. Server also defends against this, but client
+  // omission keeps the wire payload honest.
   const dirtyItems = pr
     ? pr.items
         .filter((it: PurchaseRequestItem) => {
           const e = edits[it.id];
           if (!e) return false;
+          const currentCost = it.estimatedUnitCost ?? 0;
           const q = e.qty !== undefined ? parseFloat(e.qty) : it.shortfallQty;
-          const c =
-            e.cost !== undefined ? parseFloat(e.cost) : it.estimatedUnitCost;
-          return (
-            (!isNaN(q) && q !== it.shortfallQty) ||
-            (!isNaN(c) && c !== it.estimatedUnitCost)
-          );
+          const qtyChanged = !isNaN(q) && q !== it.shortfallQty;
+          if (!showPrices) return qtyChanged;
+          const c = e.cost !== undefined ? parseFloat(e.cost) : currentCost;
+          const costChanged = !isNaN(c) && c !== currentCost;
+          return qtyChanged || costChanged;
         })
         .map((it: PurchaseRequestItem) => {
           const e = edits[it.id];
-          return {
+          const currentCost = it.estimatedUnitCost ?? 0;
+          const base: { id: number; shortfallQty: number; estimatedUnitCost?: number } = {
             id: it.id,
             shortfallQty:
               e?.qty !== undefined ? parseFloat(e.qty) : it.shortfallQty,
-            estimatedUnitCost:
-              e?.cost !== undefined
-                ? parseFloat(e.cost)
-                : it.estimatedUnitCost,
           };
+          if (showPrices) {
+            base.estimatedUnitCost =
+              e?.cost !== undefined ? parseFloat(e.cost) : currentCost;
+          }
+          return base;
         })
     : [];
 
@@ -295,20 +325,27 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
       toast({ title: "Description and positive quantity are required", variant: "destructive" });
       return;
     }
+    const addItem: {
+      branch: PurchaseRequestItemBranch;
+      description: string;
+      unit: string;
+      shortfallQty: number;
+      estimatedUnitCost?: number;
+    } = {
+      branch: newItem.branch,
+      description: newItem.description.trim(),
+      unit: newItem.unit || "pcs",
+      shortfallQty: qty,
+    };
+    // Only include cost when this role is allowed to see/set prices.
+    // Server also strips this for raiser-only roles as defence in depth.
+    if (showPrices) {
+      addItem.estimatedUnitCost = Number.isFinite(cost) ? cost : 0;
+    }
     await update.mutateAsync(
       {
         id,
-        data: {
-          addItems: [
-            {
-              branch: newItem.branch,
-              description: newItem.description.trim(),
-              unit: newItem.unit || "pcs",
-              shortfallQty: qty,
-              estimatedUnitCost: Number.isFinite(cost) ? cost : 0,
-            },
-          ],
-        },
+        data: { addItems: [addItem] },
       },
       {
         onSuccess: () => {
@@ -403,10 +440,32 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
           <Skeleton className="h-48 w-full" />
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <Card><CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Items</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{pr.items.length}</CardContent></Card>
-              <Card><CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Est. Value</CardTitle></CardHeader><CardContent className="text-2xl font-bold">₹{(pr.totalEstimatedValue ?? 0).toLocaleString("en-IN")}</CardContent></Card>
-              <Card><CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Created By</CardTitle></CardHeader><CardContent className="text-sm">{pr.createdByName ?? "—"}<div className="text-xs text-muted-foreground">{formatDate(pr.createdAt)}</div></CardContent></Card>
+            <div className={`grid ${showPrices ? "grid-cols-3" : "grid-cols-2"} gap-3 mb-4`}>
+              <Card>
+                <CardHeader className="pb-1">
+                  <CardTitle className="text-xs text-muted-foreground">Items</CardTitle>
+                </CardHeader>
+                <CardContent className="text-2xl font-bold">{pr.items.length}</CardContent>
+              </Card>
+              {showPrices && (
+                <Card data-testid="card-pr-est-value">
+                  <CardHeader className="pb-1">
+                    <CardTitle className="text-xs text-muted-foreground">Est. Value</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-2xl font-bold">
+                    ₹{(pr.totalEstimatedValue ?? 0).toLocaleString("en-IN")}
+                  </CardContent>
+                </Card>
+              )}
+              <Card data-testid="card-pr-raised-by">
+                <CardHeader className="pb-1">
+                  <CardTitle className="text-xs text-muted-foreground">Raised By</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-lg font-semibold">{pr.createdByName ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">on {formatDate(pr.createdAt)}</div>
+                </CardContent>
+              </Card>
             </div>
 
             <Table>
@@ -417,7 +476,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                   <TableHead className="text-right">Required</TableHead>
                   <TableHead className="text-right">On Hand</TableHead>
                   <TableHead className="text-right">Shortfall (editable)</TableHead>
-                  <TableHead className="text-right">Est. Unit Cost (editable)</TableHead>
+                  {showPrices && <TableHead className="text-right">Est. Unit Cost (editable)</TableHead>}
                   <TableHead>Vendor (for PO)</TableHead>
                   <TableHead>Status</TableHead>
                   {pr.status === "proposed" && <TableHead className="w-12"></TableHead>}
@@ -460,26 +519,28 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {pr.status === "proposed" ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="h-8 w-28 text-right ml-auto"
-                          value={edits[it.id]?.cost ?? String(it.estimatedUnitCost)}
-                          onChange={(e) =>
-                            setEdits({
-                              ...edits,
-                              [it.id]: { ...edits[it.id], cost: e.target.value },
-                            })
-                          }
-                          data-testid={`input-cost-${it.id}`}
-                        />
-                      ) : (
-                        <>₹{it.estimatedUnitCost.toLocaleString("en-IN")}</>
-                      )}
-                    </TableCell>
+                    {showPrices && (
+                      <TableCell className="text-right" data-testid={`cell-pr-item-cost-${it.id}`}>
+                        {pr.status === "proposed" ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="h-8 w-28 text-right ml-auto"
+                            value={edits[it.id]?.cost ?? String(it.estimatedUnitCost ?? 0)}
+                            onChange={(e) =>
+                              setEdits({
+                                ...edits,
+                                [it.id]: { ...edits[it.id], cost: e.target.value },
+                              })
+                            }
+                            data-testid={`input-cost-${it.id}`}
+                          />
+                        ) : (
+                          <>₹{(it.estimatedUnitCost ?? 0).toLocaleString("en-IN")}</>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
                       {pr.status === "proposed" && it.branch !== PurchaseRequestItemBranch.manufactured && it.shortfallQty > 0 ? (
                         <Input
@@ -588,17 +649,19 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                   />
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Estimated Unit Cost (₹)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={newItem.estimatedUnitCost}
-                  onChange={(e) => setNewItem({ ...newItem, estimatedUnitCost: e.target.value })}
-                  data-testid="input-add-cost"
-                />
-              </div>
+              {showPrices && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Estimated Unit Cost (₹)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newItem.estimatedUnitCost}
+                    onChange={(e) => setNewItem({ ...newItem, estimatedUnitCost: e.target.value })}
+                    data-testid="input-add-cost"
+                  />
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>

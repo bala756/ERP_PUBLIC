@@ -4173,7 +4173,12 @@ export const GetPurchaseRequestsResponseItem = zod.object({
   createdAt: zod.string(),
   updatedAt: zod.string(),
   itemCount: zod.number(),
-  totalEstimatedValue: zod.number(),
+  totalEstimatedValue: zod
+    .number()
+    .nullish()
+    .describe(
+      "Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+    ),
 });
 export const GetPurchaseRequestsResponse = zod.array(
   GetPurchaseRequestsResponseItem,
@@ -4204,7 +4209,12 @@ export const GetPurchaseRequestResponse = zod
     createdAt: zod.string(),
     updatedAt: zod.string(),
     itemCount: zod.number(),
-    totalEstimatedValue: zod.number(),
+    totalEstimatedValue: zod
+      .number()
+      .nullish()
+      .describe(
+        "Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+      ),
   })
   .and(
     zod.object({
@@ -4222,7 +4232,12 @@ export const GetPurchaseRequestResponse = zod
           requiredQty: zod.number(),
           onHandQty: zod.number(),
           shortfallQty: zod.number(),
-          estimatedUnitCost: zod.number(),
+          estimatedUnitCost: zod
+            .number()
+            .nullish()
+            .describe(
+              "Per-unit cost. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+            ),
           status: zod.enum([
             "pending",
             "issuedFromStock",
@@ -4297,7 +4312,12 @@ export const UpdatePurchaseRequestResponse = zod
     createdAt: zod.string(),
     updatedAt: zod.string(),
     itemCount: zod.number(),
-    totalEstimatedValue: zod.number(),
+    totalEstimatedValue: zod
+      .number()
+      .nullish()
+      .describe(
+        "Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+      ),
   })
   .and(
     zod.object({
@@ -4315,7 +4335,12 @@ export const UpdatePurchaseRequestResponse = zod
           requiredQty: zod.number(),
           onHandQty: zod.number(),
           shortfallQty: zod.number(),
-          estimatedUnitCost: zod.number(),
+          estimatedUnitCost: zod
+            .number()
+            .nullish()
+            .describe(
+              "Per-unit cost. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+            ),
           status: zod.enum([
             "pending",
             "issuedFromStock",
@@ -4368,7 +4393,12 @@ export const ApprovePurchaseRequestResponse = zod
     createdAt: zod.string(),
     updatedAt: zod.string(),
     itemCount: zod.number(),
-    totalEstimatedValue: zod.number(),
+    totalEstimatedValue: zod
+      .number()
+      .nullish()
+      .describe(
+        "Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+      ),
   })
   .and(
     zod.object({
@@ -4386,7 +4416,12 @@ export const ApprovePurchaseRequestResponse = zod
           requiredQty: zod.number(),
           onHandQty: zod.number(),
           shortfallQty: zod.number(),
-          estimatedUnitCost: zod.number(),
+          estimatedUnitCost: zod
+            .number()
+            .nullish()
+            .describe(
+              "Per-unit cost. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+            ),
           status: zod.enum([
             "pending",
             "issuedFromStock",
@@ -4433,7 +4468,12 @@ export const RejectPurchaseRequestResponse = zod
     createdAt: zod.string(),
     updatedAt: zod.string(),
     itemCount: zod.number(),
-    totalEstimatedValue: zod.number(),
+    totalEstimatedValue: zod
+      .number()
+      .nullish()
+      .describe(
+        "Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+      ),
   })
   .and(
     zod.object({
@@ -4451,7 +4491,12 @@ export const RejectPurchaseRequestResponse = zod
           requiredQty: zod.number(),
           onHandQty: zod.number(),
           shortfallQty: zod.number(),
-          estimatedUnitCost: zod.number(),
+          estimatedUnitCost: zod
+            .number()
+            .nullish()
+            .describe(
+              "Per-unit cost. Returned as null for raiser-only roles (e.g. sales) who must not see prices.",
+            ),
           status: zod.enum([
             "pending",
             "issuedFromStock",

@@ -47,6 +47,22 @@ const VIEW_ROLES = [
 const APPROVE_ROLES = ["manager", "director", "admin", "cfo"] as const;
 const EDIT_ROLES = ["purchase", "manager", "director", "admin", "cfo"] as const;
 
+// Roles authorised to SEE prices on a PR. Raiser-only roles (sales,
+// purchase staff who only enter requests, stores, production, etc.) must
+// NOT see unit cost or aggregate value — both are stripped server-side.
+// Approvers and finance roles always see prices.
+const PRICE_VIEW_ROLES = new Set([
+  "manager",
+  "director",
+  "admin",
+  "cfo",
+  "accounts",
+]);
+
+function canViewPrices(role: string | undefined | null): boolean {
+  return !!role && PRICE_VIEW_ROLES.has(role);
+}
+
 purchaseRequestsRouter.use("/purchase-requests", requireAuth);
 purchaseRequestsRouter.use("/work-orders", requireAuth);
 
@@ -98,6 +114,7 @@ function serializePr(
     itemCount?: number;
     totalEstimatedValue?: number;
   },
+  showPrices: boolean = true,
 ) {
   return {
     id: pr.id,
@@ -114,7 +131,9 @@ function serializePr(
     createdAt: pr.createdAt.toISOString(),
     updatedAt: pr.updatedAt.toISOString(),
     itemCount: pr.itemCount ?? 0,
-    totalEstimatedValue: pr.totalEstimatedValue ?? 0,
+    // Prices are stripped (null) for raiser-only roles. The OpenAPI
+    // schema marks this nullable so the wire shape is honest.
+    totalEstimatedValue: showPrices ? (pr.totalEstimatedValue ?? 0) : null,
   };
 }
 
@@ -151,6 +170,7 @@ function serializePrItem(
   item: typeof purchaseRequestItemsTable.$inferSelect & {
     product?: { name: string; itemCode: string | null; unit: string } | null;
   },
+  showPrices: boolean = true,
 ) {
   return {
     id: item.id,
@@ -165,7 +185,8 @@ function serializePrItem(
     requiredQty: parseFloat(item.requiredQty),
     onHandQty: parseFloat(item.onHandQty),
     shortfallQty: parseFloat(item.shortfallQty),
-    estimatedUnitCost: parseFloat(item.estimatedUnitCost),
+    // Prices stripped for raiser-only roles. nullable per OpenAPI schema.
+    estimatedUnitCost: showPrices ? parseFloat(item.estimatedUnitCost) : null,
     status: item.status,
     purchaseOrderId: item.purchaseOrderId ?? null,
     importJobId: item.importJobId ?? null,
@@ -368,7 +389,7 @@ purchaseRequestsRouter.post(
 
       // Return the full PurchaseRequestDetail so the response satisfies the
       // generated client type (no slim-payload contract drift).
-      const detail = await buildPrDetail(pr.id);
+      const detail = await buildPrDetail(pr.id, req.session.userRole ?? null);
       res.status(201).json(detail);
       return;
     } catch (err) {
@@ -382,7 +403,8 @@ purchaseRequestsRouter.post(
 // Shared helper that returns the full PR Detail payload (matches OpenAPI
 // PurchaseRequestDetail). Used by GET /:id and POST /work-orders/:id/release
 // so both endpoints emit a payload that satisfies the generated client type.
-async function buildPrDetail(prId: number) {
+async function buildPrDetail(prId: number, viewerRole: string | null = null) {
+  const showPrices = canViewPrices(viewerRole);
   const [row] = await db
     .select({
       pr: purchaseRequestsTable,
@@ -438,25 +460,31 @@ async function buildPrDetail(prId: number) {
     ? { woNumber: row.wo.woNumber, customerName: row.wo.customerName }
     : null;
   return {
-    ...serializePr({
-      ...row.pr,
-      workOrder: woSummary,
-      createdBy,
-      approvedBy,
-      itemCount,
-      totalEstimatedValue,
-    }),
+    ...serializePr(
+      {
+        ...row.pr,
+        workOrder: woSummary,
+        createdBy,
+        approvedBy,
+        itemCount,
+        totalEstimatedValue,
+      },
+      showPrices,
+    ),
     items: items.map((r) =>
-      serializePrItem({
-        ...r.item,
-        product: r.product
-          ? {
-              name: r.product.name,
-              itemCode: r.product.itemCode,
-              unit: r.product.unit,
-            }
-          : null,
-      }),
+      serializePrItem(
+        {
+          ...r.item,
+          product: r.product
+            ? {
+                name: r.product.name,
+                itemCode: r.product.itemCode,
+                unit: r.product.unit,
+              }
+            : null,
+        },
+        showPrices,
+      ),
     ),
   };
 }
@@ -500,20 +528,24 @@ purchaseRequestsRouter.get(
       .orderBy(desc(purchaseRequestsTable.id));
 
     const totals = await getPrItemTotals(rows.map((r) => r.pr.id));
+    const showPrices = canViewPrices(req.session.userRole ?? null);
 
     res.json(
       rows.map((r) => {
         const t = totals.get(r.pr.id);
-        return serializePr({
-          ...r.pr,
-          workOrder: r.wo
-            ? { woNumber: r.wo.woNumber, customerName: r.wo.customerName }
-            : null,
-          createdBy: r.createdBy ? { name: r.createdBy.name } : null,
-          approvedBy: null,
-          itemCount: t?.itemCount ?? 0,
-          totalEstimatedValue: t?.totalEstimatedValue ?? 0,
-        });
+        return serializePr(
+          {
+            ...r.pr,
+            workOrder: r.wo
+              ? { woNumber: r.wo.woNumber, customerName: r.wo.customerName }
+              : null,
+            createdBy: r.createdBy ? { name: r.createdBy.name } : null,
+            approvedBy: null,
+            itemCount: t?.itemCount ?? 0,
+            totalEstimatedValue: t?.totalEstimatedValue ?? 0,
+          },
+          showPrices,
+        );
       }),
     );
   },
@@ -530,7 +562,7 @@ purchaseRequestsRouter.get(
       return;
     }
 
-    const detail = await buildPrDetail(id);
+    const detail = await buildPrDetail(id, req.session.userRole ?? null);
     if (!detail) {
       res.status(404).json({ error: "PR not found" });
       return;
@@ -587,6 +619,29 @@ purchaseRequestsRouter.patch(
       return;
     }
     const data = parsed.data;
+
+    // Defense in depth: roles outside PRICE_VIEW_ROLES never see price fields
+    // (serialized as null), so they must not be allowed to write them either.
+    // Silently strip estimatedUnitCost from any items[]/addItems[] payload they
+    // submit — prevents the UI from accidentally zeroing hidden costs and
+    // closes a privilege-escalation gap on price data.
+    const canWritePrices = canViewPrices(req.session.userRole ?? null);
+    if (!canWritePrices) {
+      if (data.items) {
+        for (const it of data.items) {
+          if (it.estimatedUnitCost !== undefined) {
+            delete (it as { estimatedUnitCost?: number }).estimatedUnitCost;
+          }
+        }
+      }
+      if (data.addItems) {
+        for (const it of data.addItems) {
+          if (it.estimatedUnitCost !== undefined) {
+            delete (it as { estimatedUnitCost?: number }).estimatedUnitCost;
+          }
+        }
+      }
+    }
 
     // Wrap the entire mutation (notes + edit items + remove items + add items)
     // in a single transaction. All ownership checks happen upfront so we

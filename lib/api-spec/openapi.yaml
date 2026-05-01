@@ -5403,6 +5403,8 @@ components:
           type: integer
         totalEstimatedValue:
           type: number
+          nullable: true
+          description: Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices.
       required:
         - id
         - prNumber
@@ -5411,7 +5413,6 @@ components:
         - createdAt
         - updatedAt
         - itemCount
-        - totalEstimatedValue
 
     PurchaseRequestItem:
       type: object
@@ -5448,6 +5449,8 @@ components:
           type: number
         estimatedUnitCost:
           type: number
+          nullable: true
+          description: Per-unit cost. Returned as null for raiser-only roles (e.g. sales) who must not see prices.
         status:
           type: string
           enum: [pending, issuedFromStock, convertedToPo, convertedToImport, cancelled]
@@ -5474,7 +5477,6 @@ components:
         - requiredQty
         - onHandQty
         - shortfallQty
-        - estimatedUnitCost
         - status
 
     PurchaseRequestDetail:

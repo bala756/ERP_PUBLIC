@@ -1629,7 +1629,8 @@ export interface PurchaseRequest {
   createdAt: string;
   updatedAt: string;
   itemCount: number;
-  totalEstimatedValue: number;
+  /** Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices. */
+  totalEstimatedValue?: number | null;
 }
 
 export type PurchaseRequestItemBranch =
@@ -1665,7 +1666,8 @@ export interface PurchaseRequestItem {
   requiredQty: number;
   onHandQty: number;
   shortfallQty: number;
-  estimatedUnitCost: number;
+  /** Per-unit cost. Returned as null for raiser-only roles (e.g. sales) who must not see prices. */
+  estimatedUnitCost?: number | null;
   status: PurchaseRequestItemStatus;
   purchaseOrderId?: number | null;
   purchaseOrderNumber?: string | null;
