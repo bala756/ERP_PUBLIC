@@ -53,6 +53,11 @@ function serializeWO(
     items: (wo.items ?? []).map((item) => ({
       id: item.id,
       workOrderId: item.workOrderId,
+      productId: item.productId ?? null,
+      productCode: item.productCode ?? null,
+      productImageUrl: item.productImageUrl ?? null,
+      hsnCode: item.hsnCode ?? null,
+      unit: item.unit ?? null,
       description: item.description,
       qty: parseFloat(item.qty),
       unitPrice: parseFloat(item.unitPrice),
@@ -162,6 +167,11 @@ const createWOSchema = z.object({
   items: z
     .array(
       z.object({
+        productId: z.number().int().positive(),
+        productCode: z.string().optional(),
+        productImageUrl: z.string().nullable().optional(),
+        hsnCode: z.string().nullable().optional(),
+        unit: z.string().optional(),
         description: z.string().min(1),
         qty: z.number().positive().default(1),
         unitPrice: z.number().min(0).default(0),
@@ -273,6 +283,11 @@ ordersRouter.post("/work-orders", requireRole(...WRITE_ROLES), async (req, res) 
     await db.insert(workOrderItemsTable).values(
       parsed.data.items.map((item) => ({
         workOrderId: wo.id,
+        productId: item.productId,
+        productCode: item.productCode ?? null,
+        productImageUrl: item.productImageUrl ?? null,
+        hsnCode: item.hsnCode ?? null,
+        unit: item.unit ?? null,
         description: item.description,
         qty: item.qty.toString(),
         unitPrice: item.unitPrice.toString(),

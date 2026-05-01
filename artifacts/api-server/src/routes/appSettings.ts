@@ -12,6 +12,18 @@ const router: IRouter = Router();
 const ADMIN_ROLES = ["admin"] as const;
 const SETTINGS_ID = 1;
 
+function scrubHtml(input: string | null | undefined): string | null {
+  if (input == null) return null;
+  let out = String(input);
+  out = out.replace(/<\s*script[\s\S]*?<\s*\/\s*script\s*>/gi, "");
+  out = out.replace(/<\s*iframe[\s\S]*?<\s*\/\s*iframe\s*>/gi, "");
+  out = out.replace(/<\s*style[\s\S]*?<\s*\/\s*style\s*>/gi, "");
+  out = out.replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, "");
+  out = out.replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, "");
+  out = out.replace(/javascript\s*:/gi, "");
+  return out;
+}
+
 function serialize(row: typeof appSettingsTable.$inferSelect) {
   return AppSettings.parse({
     id: row.id,
@@ -78,7 +90,7 @@ router.put(
     if (data.proposalFooterNotes !== undefined)
       updateData.proposalFooterNotes = data.proposalFooterNotes;
     if (data.proposalTermsAndConditions !== undefined)
-      updateData.proposalTermsAndConditions = data.proposalTermsAndConditions;
+      updateData.proposalTermsAndConditions = scrubHtml(data.proposalTermsAndConditions);
 
     const [updated] = await db
       .update(appSettingsTable)

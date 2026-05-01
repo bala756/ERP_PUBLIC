@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Printer, Package } from "lucide-react";
 import { objectPathToUrl } from "@/lib/uploadFile";
+import { RichTextView } from "@/components/RichTextEditor";
 
 const formatINR = (v: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -273,9 +274,10 @@ export default function ProposalPrint() {
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground print:text-gray-500 mb-1">
               Terms &amp; Conditions
             </p>
-            <p className="whitespace-pre-wrap text-xs leading-relaxed">
-              {settings.proposalTermsAndConditions}
-            </p>
+            <RichTextView
+              html={settings.proposalTermsAndConditions}
+              className="prose prose-sm max-w-none text-xs leading-relaxed [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_a]:underline"
+            />
           </section>
         )}
 

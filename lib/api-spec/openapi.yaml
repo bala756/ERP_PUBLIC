@@ -2758,6 +2758,21 @@ components:
           type: integer
         workOrderId:
           type: integer
+        productId:
+          type: integer
+          nullable: true
+        productCode:
+          type: string
+          nullable: true
+        productImageUrl:
+          type: string
+          nullable: true
+        hsnCode:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
         description:
           type: string
         qty:
@@ -2860,6 +2875,18 @@ components:
           items:
             type: object
             properties:
+              productId:
+                type: integer
+              productCode:
+                type: string
+              productImageUrl:
+                type: string
+                nullable: true
+              hsnCode:
+                type: string
+                nullable: true
+              unit:
+                type: string
               description:
                 type: string
               qty:
@@ -2870,6 +2897,7 @@ components:
                 type: string
                 enum: [imported, manufacturing]
             required:
+              - productId
               - description
       required:
         - customerName

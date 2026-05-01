@@ -84,6 +84,11 @@ export const workOrderItemsTable = pgTable("work_order_items", {
   workOrderId: integer("work_order_id")
     .notNull()
     .references(() => workOrdersTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id"),
+  productCode: varchar("product_code", { length: 64 }),
+  productImageUrl: text("product_image_url"),
+  hsnCode: varchar("hsn_code", { length: 16 }),
+  unit: varchar("unit", { length: 16 }),
   description: text("description").notNull(),
   qty: text("qty").notNull().default("1"),
   unitPrice: text("unit_price").notNull().default("0"),

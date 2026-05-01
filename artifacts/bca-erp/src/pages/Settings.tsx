@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Lock, User, FileText } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ImageUpload } from "@/components/ImageUpload";
+import { RichTextEditor } from "@/components/RichTextEditor";
 
 const passwordSchema = z
   .object({
@@ -356,15 +357,17 @@ function PrintTemplateCard() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="proposal-tc">Terms &amp; Conditions</Label>
-              <Textarea
-                id="proposal-tc"
-                rows={6}
+              <Label htmlFor="proposal-tc">Terms &amp; Conditions (rich text)</Label>
+              <RichTextEditor
                 value={proposalTermsAndConditions}
-                onChange={(e) => setProposalTermsAndConditions(e.target.value)}
-                placeholder="Standard T&C printed on each proposal..."
-                data-testid="textarea-proposal-tc"
+                onChange={setProposalTermsAndConditions}
+                placeholder="Standard T&C printed on each proposal. Use bold, lists, links..."
+                minRows={6}
+                testId="editor-proposal-tc"
               />
+              <p className="text-xs text-muted-foreground">
+                Supports bold, italic, underline, bulleted/numbered lists and links. HTML is sanitized before saving and rendering.
+              </p>
             </div>
 
             <div className="space-y-1.5">

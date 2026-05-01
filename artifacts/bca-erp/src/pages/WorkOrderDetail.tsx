@@ -421,11 +421,29 @@ export default function WorkOrderDetail() {
           return (
             <Card key={item.id} className="border">
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-base font-semibold">{item.description}</CardTitle>
-                    <div className="text-sm text-muted-foreground mt-0.5">
-                      Qty: {item.qty} × ₹{item.unitPrice.toLocaleString()}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    {item.productImageUrl ? (
+                      <img
+                        src={item.productImageUrl}
+                        alt={item.description}
+                        className="w-14 h-14 rounded border object-cover bg-white shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded border bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+                        <Package className="h-5 w-5" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <CardTitle className="text-base font-semibold truncate">{item.description}</CardTitle>
+                      <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                        {item.productCode && <span className="font-mono">[{item.productCode}]</span>}
+                        {item.hsnCode && <span>HSN: {item.hsnCode}</span>}
+                        {item.unit && <span>Unit: {item.unit}</span>}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-0.5">
+                        Qty: {item.qty} × ₹{item.unitPrice.toLocaleString()}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">

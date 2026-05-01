@@ -416,6 +416,11 @@ export const WorkOrderItemWorkflowType = {
 export interface WorkOrderItem {
   id: number;
   workOrderId: number;
+  productId?: number | null;
+  productCode?: string | null;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string | null;
   description: string;
   qty: number;
   unitPrice: number;
@@ -462,6 +467,11 @@ export const CreateWorkOrderBodyItemsItemWorkflowType = {
 } as const;
 
 export type CreateWorkOrderBodyItemsItem = {
+  productId: number;
+  productCode?: string;
+  productImageUrl?: string | null;
+  hsnCode?: string | null;
+  unit?: string;
   description: string;
   qty?: number;
   unitPrice?: number;

@@ -716,6 +716,11 @@ leadsRouter.post(
       const woNumber = `WO-${woYear}-${woSeq}`;
 
       const lineItems = (Array.isArray(proposal.proposal.lineItems) ? proposal.proposal.lineItems : []) as Array<{
+        productId?: number;
+        productCode?: string | null;
+        productImageUrl?: string | null;
+        hsnCode?: string | null;
+        unit?: string | null;
         description?: string;
         qty?: number;
         unitPrice?: number;
@@ -740,6 +745,11 @@ leadsRouter.post(
         await db.insert(workOrderItemsTable).values(
           lineItems.map((li) => ({
             workOrderId: wo.id,
+            productId: li.productId ?? null,
+            productCode: li.productCode ?? null,
+            productImageUrl: li.productImageUrl ?? null,
+            hsnCode: li.hsnCode ?? null,
+            unit: li.unit ?? null,
             description: li.description ?? "Item",
             qty: String(li.qty ?? 1),
             unitPrice: String(li.unitPrice ?? 0),
