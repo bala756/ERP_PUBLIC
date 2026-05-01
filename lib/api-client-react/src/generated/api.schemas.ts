@@ -385,6 +385,7 @@ export interface PurchaseOrder {
   id: number;
   poNumber: string;
   workOrderId: number;
+  woNumber?: string | null;
   workOrderItemId?: number | null;
   supplierName: string;
   supplierContact?: string | null;

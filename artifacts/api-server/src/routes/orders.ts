@@ -128,12 +128,14 @@ function serializePO(
     lineItems?: (typeof poLineItemsTable.$inferSelect)[];
     approvedBy?: { name: string } | null;
     createdBy?: { name: string } | null;
+    woNumber?: string | null;
   },
 ) {
   return {
     id: po.id,
     poNumber: po.poNumber,
     workOrderId: po.workOrderId,
+    woNumber: po.woNumber ?? null,
     workOrderItemId: po.workOrderItemId ?? null,
     supplierName: po.supplierName,
     supplierContact: po.supplierContact ?? null,
@@ -959,9 +961,11 @@ ordersRouter.get("/purchase-orders/:id", requireRole(...VIEW_ROLES), async (req,
     .select({
       po: purchaseOrdersTable,
       approvedBy: { name: usersTable.name },
+      woNumber: workOrdersTable.woNumber,
     })
     .from(purchaseOrdersTable)
     .leftJoin(usersTable, eq(purchaseOrdersTable.approvedById, usersTable.id))
+    .leftJoin(workOrdersTable, eq(purchaseOrdersTable.workOrderId, workOrdersTable.id))
     .where(eq(purchaseOrdersTable.id, id));
 
   if (!row) {
@@ -974,7 +978,7 @@ ordersRouter.get("/purchase-orders/:id", requireRole(...VIEW_ROLES), async (req,
     .from(poLineItemsTable)
     .where(eq(poLineItemsTable.purchaseOrderId, id));
 
-  res.json(serializePO({ ...row.po, lineItems: liRows, approvedBy: row.approvedBy }));
+  res.json(serializePO({ ...row.po, lineItems: liRows, approvedBy: row.approvedBy, woNumber: row.woNumber }));
 });
 
 ordersRouter.patch("/purchase-orders/:id", requireRole(...PO_CREATE_ROLES), async (req, res) => {

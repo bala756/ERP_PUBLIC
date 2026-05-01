@@ -188,7 +188,9 @@ export default function ManufacturingPurchaseOrders() {
               : pos.map((po) => (
                 <TableRow key={po.id}>
                   <TableCell className="font-mono font-medium">
-                    <div>{po.poNumber}</div>
+                    <Link href={`/purchase-orders/${po.id}/print`} className="hover:underline text-blue-700">
+                      {po.poNumber}
+                    </Link>
                     {po.warrantyText && (
                       <div className="text-xs text-muted-foreground mt-0.5">Warranty: {po.warrantyText}</div>
                     )}

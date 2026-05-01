@@ -175,7 +175,11 @@ export default function ImportedPurchaseOrders() {
               )
               : pos.map((po) => (
                 <TableRow key={po.id}>
-                  <TableCell className="font-mono font-medium">{po.poNumber}</TableCell>
+                  <TableCell className="font-mono font-medium">
+                    <Link href={`/purchase-orders/${po.id}/print`} className="hover:underline text-blue-700">
+                      {po.poNumber}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">{po.supplierName}</div>
                     {po.supplierContact && (

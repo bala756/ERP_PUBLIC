@@ -3207,6 +3207,9 @@ components:
           type: string
         workOrderId:
           type: integer
+        woNumber:
+          type: string
+          nullable: true
         workOrderItemId:
           type: integer
           nullable: true

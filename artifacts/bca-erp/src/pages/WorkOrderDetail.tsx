@@ -178,6 +178,7 @@ interface POLineItemForm {
   qty: string;
   unitPrice: string;
   gstRate: string;
+  stockBalance?: number;
 }
 
 interface POFormState {
@@ -1261,6 +1262,20 @@ export default function WorkOrderDetail() {
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
+                      {li.stockBalance !== undefined && (
+                        <div className={`text-xs mt-0.5 font-medium ${li.stockBalance > 0 ? "text-green-700" : "text-amber-600"}`}>
+                          On-hand: {li.stockBalance} {li.unit ?? ""}
+                          {li.stockBalance > 0 && parseFloat(li.qty) > 0 && li.stockBalance >= parseFloat(li.qty) && (
+                            <span className="ml-1 text-green-600">(sufficient stock)</span>
+                          )}
+                          {li.stockBalance > 0 && parseFloat(li.qty) > 0 && li.stockBalance < parseFloat(li.qty) && (
+                            <span className="ml-1 text-amber-600">(shortfall: {(parseFloat(li.qty) - li.stockBalance).toFixed(2)})</span>
+                          )}
+                          {li.stockBalance === 0 && (
+                            <span className="ml-1 text-red-600">(no stock)</span>
+                          )}
+                        </div>
+                      )}
                       <Textarea
                         rows={2}
                         className="mt-1 text-xs"
@@ -1308,6 +1323,7 @@ export default function WorkOrderDetail() {
                       qty: "1",
                       unitPrice: String(p.unitPrice),
                       gstRate: String(p.gstRate),
+                      stockBalance: p.stockBalance,
                     },
                   ],
                 }));

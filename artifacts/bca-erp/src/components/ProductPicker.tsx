@@ -25,6 +25,7 @@ export interface PickedProduct {
   description: string;
   unitPrice: number;
   gstRate: number;
+  stockBalance: number;
 }
 
 interface ProductPickerProps {
@@ -49,6 +50,7 @@ function toPicked(item: InventoryItem, mode: "sale" | "purchase"): PickedProduct
     description: item.longDescription || item.description || item.name,
     unitPrice: price,
     gstRate: item.gstRate,
+    stockBalance: item.stockBalance ?? 0,
   };
 }
 

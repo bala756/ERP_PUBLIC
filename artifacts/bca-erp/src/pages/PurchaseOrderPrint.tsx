@@ -66,7 +66,10 @@ export default function PurchaseOrderPrint() {
           <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">BCA Entertainment Works</h1>
-              <p className="text-sm text-gray-600 mt-1">Entertainment Infrastructure Solutions</p>
+              <p className="text-sm text-gray-600 mt-0.5">Entertainment Infrastructure Solutions</p>
+              <p className="text-xs text-gray-500 mt-1">GSTIN: 27AABCB1234A1Z5</p>
+              <p className="text-xs text-gray-500">Shop No. 12, Industrial Estate, Navi Mumbai — 400705</p>
+              <p className="text-xs text-gray-500">Tel: +91 22 1234 5678 | info@bcaentertainmentworks.in</p>
             </div>
             <div className="text-right">
               <p className="text-xl font-bold text-gray-900">PURCHASE ORDER</p>
@@ -93,7 +96,7 @@ export default function PurchaseOrderPrint() {
             </div>
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Reference</p>
-              <p className="text-sm text-gray-700">Work Order: <span className="font-mono font-semibold">#{po.workOrderId}</span></p>
+              <p className="text-sm text-gray-700">Work Order: <span className="font-mono font-semibold">{po.woNumber ?? `#${po.workOrderId}`}</span></p>
               {po.paymentTerms && (
                 <p className="text-sm text-gray-700">Payment Terms: <span className="font-semibold">{po.paymentTerms}</span></p>
               )}
@@ -162,13 +165,19 @@ export default function PurchaseOrderPrint() {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={7} className="border border-gray-300 px-3 py-2 text-right font-semibold text-sm">Sub Total</td>
-                <td className="border border-gray-300 px-3 py-2 text-right text-sm">{totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-sm">{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                <td colSpan={5} className="border border-gray-300 px-3 py-2"></td>
+                <td colSpan={2} className="border border-gray-300 px-3 py-2 text-right font-semibold text-sm">Taxable Amount</td>
+                <td colSpan={2} className="border border-gray-300 px-3 py-2 text-right text-sm">₹{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr>
+                <td colSpan={5} className="border border-gray-300 px-3 py-2"></td>
+                <td colSpan={2} className="border border-gray-300 px-3 py-2 text-right font-semibold text-sm">Total GST</td>
+                <td colSpan={2} className="border border-gray-300 px-3 py-2 text-right text-sm">₹{totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr className="bg-gray-100">
-                <td colSpan={8} className="border border-gray-300 px-3 py-3 text-right font-bold text-base">Grand Total (incl. GST)</td>
-                <td className="border border-gray-300 px-3 py-3 text-right font-bold text-base text-blue-700">
+                <td colSpan={5} className="border border-gray-300 px-3 py-3"></td>
+                <td colSpan={2} className="border border-gray-300 px-3 py-3 text-right font-bold text-base">Grand Total (incl. GST)</td>
+                <td colSpan={2} className="border border-gray-300 px-3 py-3 text-right font-bold text-base text-blue-700">
                   ₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </td>
               </tr>
