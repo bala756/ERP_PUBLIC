@@ -7,6 +7,8 @@ import {
   useCreatePurchaseOrder,
   useApprovePurchaseOrder,
   useRejectPurchaseOrder,
+  useDirectorApprovePurchaseOrder,
+  useDirectorRejectPurchaseOrder,
   useReceivePurchaseOrder,
   useAddSubcontract,
   useUpsertDelivery,
@@ -181,6 +183,10 @@ interface POLineItemForm {
 interface POFormState {
   supplierName: string;
   supplierContact: string;
+  supplierGstin: string;
+  paymentTerms: string;
+  deliveryDate: string;
+  warrantyText: string;
   quotedAmount: string;
   poAmount: string;
   notes: string;
@@ -191,6 +197,10 @@ function defaultPOForm(): POFormState {
   return {
     supplierName: "",
     supplierContact: "",
+    supplierGstin: "",
+    paymentTerms: "",
+    deliveryDate: "",
+    warrantyText: "",
     quotedAmount: "",
     poAmount: "",
     notes: "",
@@ -233,6 +243,8 @@ export default function WorkOrderDetail() {
 
   const [rejectPOId, setRejectPOId] = useState<number | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [directorRejectPOId, setDirectorRejectPOId] = useState<number | null>(null);
+  const [directorRejectNote, setDirectorRejectNote] = useState("");
 
   const updateWO = useUpdateWorkOrder({ mutation: { onSuccess: invalidate } });
   const updateItem = useUpdateWorkOrderItem({ mutation: { onSuccess: invalidate } });
@@ -244,6 +256,8 @@ export default function WorkOrderDetail() {
   });
   const approvePO = useApprovePurchaseOrder({ mutation: { onSuccess: () => { invalidate(); toast({ title: "PO approved" }); }, onError: (e: Error) => toast({ title: e.message ?? "Failed to approve", variant: "destructive" }) } });
   const rejectPO = useRejectPurchaseOrder({ mutation: { onSuccess: () => { invalidate(); setRejectPOId(null); setRejectNote(""); toast({ title: "PO rejected" }); }, onError: () => toast({ title: "Failed to reject", variant: "destructive" }) } });
+  const directorApprovePO = useDirectorApprovePurchaseOrder({ mutation: { onSuccess: () => { invalidate(); toast({ title: "PO approved by director" }); }, onError: (e: Error) => toast({ title: e.message ?? "Failed to approve", variant: "destructive" }) } });
+  const directorRejectPO = useDirectorRejectPurchaseOrder({ mutation: { onSuccess: () => { invalidate(); setDirectorRejectPOId(null); setDirectorRejectNote(""); toast({ title: "PO rejected by director" }); }, onError: () => toast({ title: "Failed to reject", variant: "destructive" }) } });
   const receivePO = useReceivePurchaseOrder({ mutation: { onSuccess: () => { invalidate(); toast({ title: "Goods received — Stock IN recorded" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
   const addSubcontract = useAddSubcontract({ mutation: { onSuccess: () => { invalidate(); setSubcontractForItem(null); setSubForm({ vendorName: "", vendorContact: "", cost: "", description: "" }); toast({ title: "Subcontract recorded" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
   const upsertDelivery = useUpsertDelivery({ mutation: { onSuccess: () => { invalidate(); setShowDelivery(false); toast({ title: "Delivery updated" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
@@ -352,6 +366,7 @@ export default function WorkOrderDetail() {
   const canWrite = user && ["sales", "purchase", "manager", "director", "admin", "cfo", "stores", "accounts"].includes(user.role);
   const canApprove = user && APPROVE_ROLES.includes(user.role);
   const isCFO = user && ["cfo", "director", "admin"].includes(user.role);
+  const isDirector = user && ["director", "admin"].includes(user.role);
   const canReceive = user && RECEIVE_ROLES.includes(user.role);
   const canCreatePO = user && PO_CREATE_ROLES.includes(user.role);
   const canInvoice = user && INVOICE_ROLES.includes(user.role);
@@ -387,6 +402,10 @@ export default function WorkOrderDetail() {
         workOrderItemId: createPOForItem,
         supplierName: poForm.supplierName,
         supplierContact: poForm.supplierContact || undefined,
+        supplierGstin: poForm.supplierGstin || undefined,
+        paymentTerms: poForm.paymentTerms || undefined,
+        deliveryDate: poForm.deliveryDate || undefined,
+        warrantyText: poForm.warrantyText || undefined,
         type,
         quotedAmount: parseFloat(poForm.quotedAmount) || 0,
         poAmount: parseFloat(poForm.poAmount) || 0,
@@ -989,7 +1008,25 @@ export default function WorkOrderDetail() {
                           {po.rejectionNote && (
                             <div className="text-xs text-destructive">Rejected: {po.rejectionNote}</div>
                           )}
-                          <div className="flex gap-2 mt-1">
+                          <div className="flex gap-2 mt-1 flex-wrap">
+                            {po.status === "pendingDirectorApproval" && isDirector && (
+                              <>
+                                <Button size="sm" onClick={() => directorApprovePO.mutate({ id: po.id })} disabled={directorApprovePO.isPending}>
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Director Approve
+                                </Button>
+                                <Button size="sm" variant="destructive" onClick={() => setDirectorRejectPOId(po.id)}>
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  Director Reject
+                                </Button>
+                              </>
+                            )}
+                            {po.status === "pendingDirectorApproval" && !isDirector && (
+                              <span className="text-xs text-amber-600 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Awaiting Director approval
+                              </span>
+                            )}
                             {po.status === "pendingApproval" && canApprove && (!po.requiresCfoApproval || isCFO) && (
                               <>
                                 <Button size="sm" onClick={() => approvePO.mutate({ id: po.id })} disabled={approvePO.isPending}>
@@ -1149,9 +1186,25 @@ export default function WorkOrderDetail() {
                 <Label>Supplier Name *</Label>
                 <Input value={poForm.supplierName} onChange={(e) => setPOForm((p) => ({ ...p, supplierName: e.target.value }))} placeholder="Supplier name" />
               </div>
-              <div className="space-y-1 col-span-2">
+              <div className="space-y-1">
                 <Label>Supplier Contact</Label>
                 <Input value={poForm.supplierContact} onChange={(e) => setPOForm((p) => ({ ...p, supplierContact: e.target.value }))} placeholder="Phone / email" />
+              </div>
+              <div className="space-y-1">
+                <Label>Supplier GSTIN</Label>
+                <Input value={poForm.supplierGstin} onChange={(e) => setPOForm((p) => ({ ...p, supplierGstin: e.target.value }))} placeholder="29ABCDE1234F1Z5" maxLength={32} />
+              </div>
+              <div className="space-y-1">
+                <Label>Payment Terms</Label>
+                <Input value={poForm.paymentTerms} onChange={(e) => setPOForm((p) => ({ ...p, paymentTerms: e.target.value }))} placeholder="e.g. Net 30, 50% advance" />
+              </div>
+              <div className="space-y-1">
+                <Label>Delivery Date</Label>
+                <Input type="date" value={poForm.deliveryDate} onChange={(e) => setPOForm((p) => ({ ...p, deliveryDate: e.target.value }))} />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label>Warranty Terms</Label>
+                <Input value={poForm.warrantyText} onChange={(e) => setPOForm((p) => ({ ...p, warrantyText: e.target.value }))} placeholder="e.g. 12 months from delivery" />
               </div>
               <div className="space-y-1">
                 <Label>Quoted Amount (₹)</Label>
@@ -1366,6 +1419,24 @@ export default function WorkOrderDetail() {
             <Button variant="outline" onClick={() => { setRejectPOId(null); setRejectNote(""); }}>Cancel</Button>
             <Button variant="destructive" disabled={rejectPO.isPending} onClick={() => { if (rejectPOId !== null) rejectPO.mutate({ id: rejectPOId, data: { rejectionNote: rejectNote } }); }}>
               {rejectPO.isPending ? "Rejecting..." : "Reject"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={directorRejectPOId !== null} onOpenChange={(o) => { if (!o) { setDirectorRejectPOId(null); setDirectorRejectNote(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Director Reject Purchase Order</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Reason</Label>
+            <Textarea value={directorRejectNote} onChange={(e) => setDirectorRejectNote(e.target.value)} placeholder="Rejection reason..." rows={3} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDirectorRejectPOId(null); setDirectorRejectNote(""); }}>Cancel</Button>
+            <Button variant="destructive" disabled={directorRejectPO.isPending} onClick={() => { if (directorRejectPOId !== null) directorRejectPO.mutate({ id: directorRejectPOId, data: { rejectionNote: directorRejectNote } }); }}>
+              {directorRejectPO.isPending ? "Rejecting..." : "Reject"}
             </Button>
           </DialogFooter>
         </DialogContent>

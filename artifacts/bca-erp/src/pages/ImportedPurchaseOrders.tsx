@@ -3,6 +3,8 @@ import {
   useGetPurchaseOrders,
   useApprovePurchaseOrder,
   useRejectPurchaseOrder,
+  useDirectorApprovePurchaseOrder,
+  useDirectorRejectPurchaseOrder,
   useReceivePurchaseOrder,
   getGetPurchaseOrdersQueryKey,
 } from "@workspace/api-client-react";
@@ -23,7 +25,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Ship, CheckCircle, XCircle, PackageCheck, AlertTriangle } from "lucide-react";
+import { Ship, CheckCircle, XCircle, PackageCheck, AlertTriangle, ShieldAlert, Printer } from "lucide-react";
+import { Link } from "wouter";
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   draft: "secondary",
@@ -44,6 +47,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const APPROVE_ROLES = ["manager", "director", "admin", "cfo"];
+const DIRECTOR_ROLES = ["director", "admin"];
 const RECEIVE_ROLES = ["stores", "manager", "director", "admin"];
 
 export default function ImportedPurchaseOrders() {
@@ -52,7 +56,7 @@ export default function ImportedPurchaseOrders() {
   const qc = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState("all");
-  const [rejectTarget, setRejectTarget] = useState<number | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<{ id: number; isDirector: boolean } | null>(null);
   const [rejectNote, setRejectNote] = useState("");
 
   const { data: allPOs = [], isLoading } = useGetPurchaseOrders();
@@ -62,6 +66,7 @@ export default function ImportedPurchaseOrders() {
     .filter((po) => statusFilter === "all" || po.status === statusFilter);
 
   const canApprove = user && APPROVE_ROLES.includes(user.role);
+  const canDirectorApprove = user && DIRECTOR_ROLES.includes(user.role);
   const canReceive = user && RECEIVE_ROLES.includes(user.role);
   const isCFO = user && ["cfo", "director", "admin"].includes(user.role);
 
@@ -77,6 +82,20 @@ export default function ImportedPurchaseOrders() {
   const rejectPO = useRejectPurchaseOrder({
     mutation: {
       onSuccess: () => { invalidate(); setRejectTarget(null); setRejectNote(""); toast({ title: "PO rejected" }); },
+      onError: () => toast({ title: "Failed to reject PO", variant: "destructive" }),
+    },
+  });
+
+  const directorApprovePO = useDirectorApprovePurchaseOrder({
+    mutation: {
+      onSuccess: () => { invalidate(); toast({ title: "PO approved by director" }); },
+      onError: (err: Error) => toast({ title: err.message ?? "Failed to approve PO", variant: "destructive" }),
+    },
+  });
+
+  const directorRejectPO = useDirectorRejectPurchaseOrder({
+    mutation: {
+      onSuccess: () => { invalidate(); setRejectTarget(null); setRejectNote(""); toast({ title: "PO rejected by director" }); },
       onError: () => toast({ title: "Failed to reject PO", variant: "destructive" }),
     },
   });
@@ -111,6 +130,7 @@ export default function ImportedPurchaseOrders() {
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="pendingApproval">Pending Approval</SelectItem>
+            <SelectItem value="pendingDirectorApproval">Pending Director</SelectItem>
             <SelectItem value="approved">Approved</SelectItem>
             <SelectItem value="received">Received</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -191,7 +211,34 @@ export default function ImportedPurchaseOrders() {
                     {new Date(po.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      {po.status === "pendingDirectorApproval" && canDirectorApprove && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => directorApprovePO.mutate({ id: po.id })}
+                            disabled={directorApprovePO.isPending}
+                            title="Director Approve"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setRejectTarget({ id: po.id, isDirector: true })}
+                            title="Director Reject"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                      {po.status === "pendingDirectorApproval" && !canDirectorApprove && (
+                        <span className="text-xs text-amber-600 flex items-center gap-1">
+                          <ShieldAlert className="h-3 w-3" />
+                          Director only
+                        </span>
+                      )}
                       {po.status === "pendingApproval" && canApprove && (
                         (!po.requiresCfoApproval || isCFO) ? (
                           <>
@@ -207,7 +254,7 @@ export default function ImportedPurchaseOrders() {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => setRejectTarget(po.id)}
+                              onClick={() => setRejectTarget({ id: po.id, isDirector: false })}
                               title="Reject"
                             >
                               <XCircle className="h-4 w-4" />
@@ -237,6 +284,11 @@ export default function ImportedPurchaseOrders() {
                           Rejected
                         </span>
                       )}
+                      <Link href={`/purchase-orders/${po.id}/print`}>
+                        <Button size="sm" variant="ghost" title="Print PO">
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      </Link>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -248,7 +300,9 @@ export default function ImportedPurchaseOrders() {
       <Dialog open={rejectTarget !== null} onOpenChange={(o) => { if (!o) { setRejectTarget(null); setRejectNote(""); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject Purchase Order</DialogTitle>
+            <DialogTitle>
+              {rejectTarget?.isDirector ? "Director Reject Purchase Order" : "Reject Purchase Order"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Label>Reason for rejection</Label>
@@ -265,14 +319,18 @@ export default function ImportedPurchaseOrders() {
             </Button>
             <Button
               variant="destructive"
-              disabled={rejectPO.isPending}
+              disabled={rejectPO.isPending || directorRejectPO.isPending}
               onClick={() => {
                 if (rejectTarget !== null) {
-                  rejectPO.mutate({ id: rejectTarget, data: { rejectionNote: rejectNote } });
+                  if (rejectTarget.isDirector) {
+                    directorRejectPO.mutate({ id: rejectTarget.id, data: { rejectionNote: rejectNote } });
+                  } else {
+                    rejectPO.mutate({ id: rejectTarget.id, data: { rejectionNote: rejectNote } });
+                  }
                 }
               }}
             >
-              {rejectPO.isPending ? "Rejecting..." : "Reject PO"}
+              {(rejectPO.isPending || directorRejectPO.isPending) ? "Rejecting..." : "Reject PO"}
             </Button>
           </DialogFooter>
         </DialogContent>

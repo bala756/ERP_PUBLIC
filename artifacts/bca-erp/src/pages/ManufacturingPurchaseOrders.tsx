@@ -26,7 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Factory, CheckCircle, XCircle, PackageCheck, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Factory, CheckCircle, XCircle, PackageCheck, AlertTriangle, ShieldAlert, Printer } from "lucide-react";
+import { Link } from "wouter";
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   draft: "secondary",
@@ -306,6 +307,11 @@ export default function ManufacturingPurchaseOrders() {
                           Rejected
                         </span>
                       )}
+                      <Link href={`/purchase-orders/${po.id}/print`}>
+                        <Button size="sm" variant="ghost" title="Print PO">
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      </Link>
                     </div>
                   </TableCell>
                 </TableRow>
