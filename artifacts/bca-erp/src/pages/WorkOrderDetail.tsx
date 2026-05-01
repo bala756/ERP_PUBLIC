@@ -15,7 +15,11 @@ import {
   useReleaseWorkOrder,
   useGenerateInvoiceFromStores,
   useGetWorkOrderPnl,
+  useGetWorkOrderServiceEntries,
+  useCreateWorkOrderServiceEntry,
+  useDeleteWorkOrderServiceEntry,
   getGetWorkOrderQueryKey,
+  getGetWorkOrderServiceEntriesQueryKey,
   type WorkOrder,
   type WorkOrderItem,
   type PurchaseOrder,
@@ -40,7 +44,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   ArrowLeft, Briefcase, Package, Factory, CheckCircle, XCircle,
   PackageCheck, Truck, FileText, AlertTriangle, ChevronRight, Plus, X,
-  ClipboardList, TrendingUp, FileSpreadsheet,
+  ClipboardList, TrendingUp, FileSpreadsheet, User, Wrench, Pencil, Trash2,
+  Building2, Phone, Mail, MapPin, CalendarDays, ShieldCheck, Wallet,
 } from "lucide-react";
 import { ProductPicker, type PickedProduct } from "@/components/ProductPicker";
 import { objectPathToUrl } from "@/lib/uploadFile";
@@ -270,6 +275,61 @@ export default function WorkOrderDetail() {
     },
   });
 
+  const { data: serviceEntries = [] } = useGetWorkOrderServiceEntries(woId ?? 0, {
+    query: {
+      enabled: !!woId,
+      queryKey: getGetWorkOrderServiceEntriesQueryKey(woId ?? 0),
+    },
+  });
+
+  const [customerEditOpen, setCustomerEditOpen] = useState(false);
+  const [customerForm, setCustomerForm] = useState({
+    customerName: "",
+    company: "",
+    customerGstin: "",
+    billingAddress: "",
+    shippingAddress: "",
+    contactPhone: "",
+    contactEmail: "",
+    dispatchDate: "",
+    warrantyPeriodMonths: "",
+  });
+
+  const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [serviceForm, setServiceForm] = useState({
+    entryDate: "",
+    technicianName: "",
+    description: "",
+  });
+
+  const createServiceEntry = useCreateWorkOrderServiceEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Service entry added" });
+        if (woId) {
+          qc.invalidateQueries({ queryKey: getGetWorkOrderServiceEntriesQueryKey(woId) });
+          qc.invalidateQueries({ queryKey: getGetWorkOrderQueryKey(woId) });
+        }
+        setServiceDialogOpen(false);
+        setServiceForm({ entryDate: "", technicianName: "", description: "" });
+      },
+      onError: (e) => toast({ title: "Failed to add", description: String(e), variant: "destructive" }),
+    },
+  });
+
+  const deleteServiceEntry = useDeleteWorkOrderServiceEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Service entry removed" });
+        if (woId) {
+          qc.invalidateQueries({ queryKey: getGetWorkOrderServiceEntriesQueryKey(woId) });
+          qc.invalidateQueries({ queryKey: getGetWorkOrderQueryKey(woId) });
+        }
+      },
+      onError: (e) => toast({ title: "Failed to remove", description: String(e), variant: "destructive" }),
+    },
+  });
+
   const canWrite = user && ["sales", "purchase", "manager", "director", "admin", "cfo", "stores", "accounts"].includes(user.role);
   const canApprove = user && APPROVE_ROLES.includes(user.role);
   const isCFO = user && ["cfo", "director", "admin"].includes(user.role);
@@ -437,6 +497,97 @@ export default function WorkOrderDetail() {
         </div>
       )}
 
+      {/* Customer & Dispatch Details */}
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Customer & Dispatch
+          </CardTitle>
+          {canWrite && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCustomerForm({
+                  customerName: wo.customerName ?? "",
+                  company: wo.company ?? "",
+                  customerGstin: wo.customerGstin ?? "",
+                  billingAddress: wo.billingAddress ?? "",
+                  shippingAddress: wo.shippingAddress ?? "",
+                  contactPhone: wo.contactPhone ?? "",
+                  contactEmail: wo.contactEmail ?? "",
+                  dispatchDate: wo.dispatchDate ?? "",
+                  warrantyPeriodMonths:
+                    wo.warrantyPeriodMonths != null ? String(wo.warrantyPeriodMonths) : "",
+                });
+                setCustomerEditOpen(true);
+              }}
+              data-testid="button-edit-customer"
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+              Edit
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <Building2 className="h-3 w-3" /> Company
+              </div>
+              <div className="font-medium">{wo.company || <span className="text-muted-foreground">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">GSTIN</div>
+              <div className="font-mono">{wo.customerGstin || <span className="text-muted-foreground font-sans">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <Phone className="h-3 w-3" /> Phone
+              </div>
+              <div>{wo.contactPhone || <span className="text-muted-foreground">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <Mail className="h-3 w-3" /> Email
+              </div>
+              <div>{wo.contactEmail || <span className="text-muted-foreground">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> Billing Address
+              </div>
+              <div className="whitespace-pre-line">{wo.billingAddress || <span className="text-muted-foreground">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> Shipping Address
+              </div>
+              <div className="whitespace-pre-line">{wo.shippingAddress || <span className="text-muted-foreground">—</span>}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <CalendarDays className="h-3 w-3" /> Dispatch Date
+              </div>
+              <div>
+                {wo.dispatchDate ? new Date(wo.dispatchDate).toLocaleDateString() : <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Warranty
+              </div>
+              <div>
+                {wo.warrantyPeriodMonths != null
+                  ? `${wo.warrantyPeriodMonths} month(s)`
+                  : <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Pipeline Action Bar */}
       <Card className="border-dashed">
         <CardContent className="pt-4 pb-4 flex flex-wrap items-center gap-2">
@@ -476,40 +627,154 @@ export default function WorkOrderDetail() {
 
       {/* Per-WO P&L summary */}
       {pnl && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Profit & Loss
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-              <div>
-                <div className="text-xs text-muted-foreground">Revenue (Invoiced)</div>
-                <div className="font-bold text-green-700">₹{pnl.revenueInvoiced.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{pnl.invoiceCount} invoice(s)</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Stores Cost</div>
-                <div className="font-bold">₹{pnl.costStoresOut.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{pnl.storesOutCount} issue(s)</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Subcontract + Imports</div>
-                <div className="font-bold">₹{(pnl.costSubcontract + pnl.costImportExpenses).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Margin</div>
-                <div className={`font-bold ${pnl.margin >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                  ₹{pnl.margin.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                  <span className="text-xs ml-1">({pnl.marginPercent.toFixed(1)}%)</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Profit & Loss
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">Revenue (Invoiced)</div>
+                  <div className="font-bold text-green-700">₹{pnl.revenueInvoiced.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{pnl.invoiceCount} invoice(s)</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Stores Cost</div>
+                  <div className="font-bold">₹{pnl.costStoresOut.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{pnl.storesOutCount} issue(s)</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Subcontract + Imports</div>
+                  <div className="font-bold">₹{(pnl.costSubcontract + pnl.costImportExpenses).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Margin (Invoiced)</div>
+                  <div className={`font-bold ${pnl.margin >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    ₹{pnl.margin.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                    <span className="text-xs ml-1">({pnl.marginPercent.toFixed(1)}%)</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-project-vs-expense">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                Project Value vs Expense
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Order Value</span>
+                  <span className="font-semibold">
+                    ₹{pnl.revenueOrderValue.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total Expense</span>
+                  <span className="font-semibold">
+                    ₹{pnl.totalCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Headroom</span>
+                  <span
+                    className={`font-bold ${
+                      pnl.projectVsExpense >= 0 ? "text-emerald-700" : "text-red-600"
+                    }`}
+                  >
+                    ₹{pnl.projectVsExpense.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Order value minus total tracked cost. Positive = profit headroom remaining.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
+
+      {/* After-sales Service Entries */}
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Wrench className="h-4 w-4" />
+            After-sales Service ({serviceEntries.length})
+          </CardTitle>
+          {canWrite && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setServiceForm({
+                  entryDate: new Date().toISOString().slice(0, 10),
+                  technicianName: "",
+                  description: "",
+                });
+                setServiceDialogOpen(true);
+              }}
+              data-testid="button-add-service-entry"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add Entry
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {serviceEntries.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No service visits recorded yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {serviceEntries.map((se) => (
+                <div
+                  key={se.id}
+                  className="flex items-start justify-between gap-3 p-3 rounded-md border bg-muted/30"
+                  data-testid={`row-service-entry-${se.id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                      <CalendarDays className="h-3 w-3" />
+                      {se.entryDate ? new Date(se.entryDate).toLocaleDateString() : "—"}
+                      <span>·</span>
+                      <span className="font-medium text-foreground">{se.technicianName}</span>
+                      {se.createdByName && (
+                        <>
+                          <span>·</span>
+                          <span>logged by {se.createdByName}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-sm mt-1 whitespace-pre-line">{se.description}</div>
+                  </div>
+                  {canWrite && woId && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm("Delete this service entry?")) {
+                          deleteServiceEntry.mutate({ id: woId, entryId: se.id });
+                        }
+                      }}
+                      data-testid={`button-delete-service-entry-${se.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         <h2 className="font-semibold text-base">Line Items & Workflow</h2>
@@ -1043,6 +1308,187 @@ export default function WorkOrderDetail() {
             <Button variant="outline" onClick={() => { setRejectPOId(null); setRejectNote(""); }}>Cancel</Button>
             <Button variant="destructive" disabled={rejectPO.isPending} onClick={() => { if (rejectPOId !== null) rejectPO.mutate({ id: rejectPOId, data: { rejectionNote: rejectNote } }); }}>
               {rejectPO.isPending ? "Rejecting..." : "Reject"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={customerEditOpen} onOpenChange={setCustomerEditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Customer & Dispatch Details</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label>Customer Name</Label>
+              <Input
+                value={customerForm.customerName}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, customerName: e.target.value }))}
+                data-testid="input-customer-name"
+              />
+            </div>
+            <div>
+              <Label>Company</Label>
+              <Input
+                value={customerForm.company}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, company: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>GSTIN</Label>
+              <Input
+                value={customerForm.customerGstin}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, customerGstin: e.target.value.toUpperCase() }))}
+                placeholder="22AAAAA0000A1Z5"
+                data-testid="input-customer-gstin"
+              />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                value={customerForm.contactPhone}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, contactPhone: e.target.value }))}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={customerForm.contactEmail}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, contactEmail: e.target.value }))}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Billing Address</Label>
+              <Textarea
+                rows={2}
+                value={customerForm.billingAddress}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, billingAddress: e.target.value }))}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Shipping Address</Label>
+              <Textarea
+                rows={2}
+                value={customerForm.shippingAddress}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, shippingAddress: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Dispatch Date</Label>
+              <Input
+                type="date"
+                value={customerForm.dispatchDate ? customerForm.dispatchDate.slice(0, 10) : ""}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, dispatchDate: e.target.value }))}
+                data-testid="input-dispatch-date"
+              />
+            </div>
+            <div>
+              <Label>Warranty (months)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={customerForm.warrantyPeriodMonths}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, warrantyPeriodMonths: e.target.value }))}
+                data-testid="input-warranty-months"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomerEditOpen(false)}>Cancel</Button>
+            <Button
+              disabled={updateWO.isPending || !woId}
+              onClick={() => {
+                if (!woId) return;
+                const trimOrNull = (v: string) => (v.trim() === "" ? null : v.trim());
+                updateWO.mutate(
+                  {
+                    id: woId,
+                    data: {
+                      customerName: customerForm.customerName.trim() || wo.customerName,
+                      company: trimOrNull(customerForm.company),
+                      customerGstin: trimOrNull(customerForm.customerGstin),
+                      billingAddress: trimOrNull(customerForm.billingAddress),
+                      shippingAddress: trimOrNull(customerForm.shippingAddress),
+                      contactPhone: trimOrNull(customerForm.contactPhone),
+                      contactEmail: trimOrNull(customerForm.contactEmail),
+                      dispatchDate: trimOrNull(customerForm.dispatchDate),
+                      warrantyPeriodMonths:
+                        customerForm.warrantyPeriodMonths.trim() === ""
+                          ? null
+                          : parseInt(customerForm.warrantyPeriodMonths, 10),
+                    },
+                  },
+                  { onSuccess: () => setCustomerEditOpen(false) },
+                );
+              }}
+              data-testid="button-save-customer"
+            >
+              {updateWO.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add After-sales Service Entry</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Visit Date</Label>
+              <Input
+                type="date"
+                value={serviceForm.entryDate}
+                onChange={(e) => setServiceForm((p) => ({ ...p, entryDate: e.target.value }))}
+                data-testid="input-service-date"
+              />
+            </div>
+            <div>
+              <Label>Technician Name</Label>
+              <Input
+                value={serviceForm.technicianName}
+                onChange={(e) => setServiceForm((p) => ({ ...p, technicianName: e.target.value }))}
+                placeholder="e.g. Ramesh Kumar"
+                data-testid="input-technician-name"
+              />
+            </div>
+            <div>
+              <Label>Description / Work Done</Label>
+              <Textarea
+                rows={4}
+                value={serviceForm.description}
+                onChange={(e) => setServiceForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder="Describe the issue reported and the resolution..."
+                data-testid="input-service-description"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setServiceDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={
+                createServiceEntry.isPending ||
+                !woId ||
+                !serviceForm.entryDate ||
+                !serviceForm.technicianName.trim() ||
+                !serviceForm.description.trim()
+              }
+              onClick={() => {
+                if (!woId) return;
+                createServiceEntry.mutate({
+                  id: woId,
+                  data: {
+                    entryDate: serviceForm.entryDate,
+                    technicianName: serviceForm.technicianName.trim(),
+                    description: serviceForm.description.trim(),
+                  },
+                });
+              }}
+              data-testid="button-save-service-entry"
+            >
+              {createServiceEntry.isPending ? "Saving..." : "Save Entry"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -47,6 +47,7 @@ import type {
   CreateSupplierBillBody,
   CreateUserBody,
   CreateWorkOrderBody,
+  CreateWorkOrderServiceEntryBody,
   CreditorsDebtors,
   DashboardSummary,
   DeleteInventoryItem200,
@@ -124,10 +125,12 @@ import type {
   UpdateUserBody,
   UpdateWorkOrderBody,
   UpdateWorkOrderItemBody,
+  UpdateWorkOrderServiceEntryBody,
   UpsertDeliveryBody,
   User,
   WorkOrder,
   WorkOrderPnl,
+  WorkOrderServiceEntry,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -2923,6 +2926,395 @@ export const useMarkFinishedGoods = <
   TContext
 > => {
   return useMutation(getMarkFinishedGoodsMutationOptions(options));
+};
+
+/**
+ * @summary List after-sales service entries for a work order
+ */
+export const getGetWorkOrderServiceEntriesUrl = (id: number) => {
+  return `/api/work-orders/${id}/service-entries`;
+};
+
+export const getWorkOrderServiceEntries = async (
+  id: number,
+  options?: RequestInit,
+): Promise<WorkOrderServiceEntry[]> => {
+  return customFetch<WorkOrderServiceEntry[]>(
+    getGetWorkOrderServiceEntriesUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetWorkOrderServiceEntriesQueryKey = (id: number) => {
+  return [`/api/work-orders/${id}/service-entries`] as const;
+};
+
+export const getGetWorkOrderServiceEntriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWorkOrderServiceEntries>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWorkOrderServiceEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetWorkOrderServiceEntriesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWorkOrderServiceEntries>>
+  > = ({ signal }) =>
+    getWorkOrderServiceEntries(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWorkOrderServiceEntries>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWorkOrderServiceEntriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWorkOrderServiceEntries>>
+>;
+export type GetWorkOrderServiceEntriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List after-sales service entries for a work order
+ */
+
+export function useGetWorkOrderServiceEntries<
+  TData = Awaited<ReturnType<typeof getWorkOrderServiceEntries>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWorkOrderServiceEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWorkOrderServiceEntriesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an after-sales service entry to a work order
+ */
+export const getCreateWorkOrderServiceEntryUrl = (id: number) => {
+  return `/api/work-orders/${id}/service-entries`;
+};
+
+export const createWorkOrderServiceEntry = async (
+  id: number,
+  createWorkOrderServiceEntryBody: CreateWorkOrderServiceEntryBody,
+  options?: RequestInit,
+): Promise<WorkOrderServiceEntry> => {
+  return customFetch<WorkOrderServiceEntry>(
+    getCreateWorkOrderServiceEntryUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createWorkOrderServiceEntryBody),
+    },
+  );
+};
+
+export const getCreateWorkOrderServiceEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createWorkOrderServiceEntry>>,
+    TError,
+    { id: number; data: BodyType<CreateWorkOrderServiceEntryBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createWorkOrderServiceEntry>>,
+  TError,
+  { id: number; data: BodyType<CreateWorkOrderServiceEntryBody> },
+  TContext
+> => {
+  const mutationKey = ["createWorkOrderServiceEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createWorkOrderServiceEntry>>,
+    { id: number; data: BodyType<CreateWorkOrderServiceEntryBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createWorkOrderServiceEntry(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateWorkOrderServiceEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createWorkOrderServiceEntry>>
+>;
+export type CreateWorkOrderServiceEntryMutationBody =
+  BodyType<CreateWorkOrderServiceEntryBody>;
+export type CreateWorkOrderServiceEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an after-sales service entry to a work order
+ */
+export const useCreateWorkOrderServiceEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createWorkOrderServiceEntry>>,
+    TError,
+    { id: number; data: BodyType<CreateWorkOrderServiceEntryBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createWorkOrderServiceEntry>>,
+  TError,
+  { id: number; data: BodyType<CreateWorkOrderServiceEntryBody> },
+  TContext
+> => {
+  return useMutation(getCreateWorkOrderServiceEntryMutationOptions(options));
+};
+
+/**
+ * @summary Update an after-sales service entry
+ */
+export const getUpdateWorkOrderServiceEntryUrl = (
+  id: number,
+  entryId: number,
+) => {
+  return `/api/work-orders/${id}/service-entries/${entryId}`;
+};
+
+export const updateWorkOrderServiceEntry = async (
+  id: number,
+  entryId: number,
+  updateWorkOrderServiceEntryBody: UpdateWorkOrderServiceEntryBody,
+  options?: RequestInit,
+): Promise<WorkOrderServiceEntry> => {
+  return customFetch<WorkOrderServiceEntry>(
+    getUpdateWorkOrderServiceEntryUrl(id, entryId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateWorkOrderServiceEntryBody),
+    },
+  );
+};
+
+export const getUpdateWorkOrderServiceEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateWorkOrderServiceEntry>>,
+    TError,
+    {
+      id: number;
+      entryId: number;
+      data: BodyType<UpdateWorkOrderServiceEntryBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateWorkOrderServiceEntry>>,
+  TError,
+  {
+    id: number;
+    entryId: number;
+    data: BodyType<UpdateWorkOrderServiceEntryBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateWorkOrderServiceEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateWorkOrderServiceEntry>>,
+    {
+      id: number;
+      entryId: number;
+      data: BodyType<UpdateWorkOrderServiceEntryBody>;
+    }
+  > = (props) => {
+    const { id, entryId, data } = props ?? {};
+
+    return updateWorkOrderServiceEntry(id, entryId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateWorkOrderServiceEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateWorkOrderServiceEntry>>
+>;
+export type UpdateWorkOrderServiceEntryMutationBody =
+  BodyType<UpdateWorkOrderServiceEntryBody>;
+export type UpdateWorkOrderServiceEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an after-sales service entry
+ */
+export const useUpdateWorkOrderServiceEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateWorkOrderServiceEntry>>,
+    TError,
+    {
+      id: number;
+      entryId: number;
+      data: BodyType<UpdateWorkOrderServiceEntryBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateWorkOrderServiceEntry>>,
+  TError,
+  {
+    id: number;
+    entryId: number;
+    data: BodyType<UpdateWorkOrderServiceEntryBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateWorkOrderServiceEntryMutationOptions(options));
+};
+
+/**
+ * @summary Delete an after-sales service entry
+ */
+export const getDeleteWorkOrderServiceEntryUrl = (
+  id: number,
+  entryId: number,
+) => {
+  return `/api/work-orders/${id}/service-entries/${entryId}`;
+};
+
+export const deleteWorkOrderServiceEntry = async (
+  id: number,
+  entryId: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(
+    getDeleteWorkOrderServiceEntryUrl(id, entryId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteWorkOrderServiceEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteWorkOrderServiceEntry>>,
+    TError,
+    { id: number; entryId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteWorkOrderServiceEntry>>,
+  TError,
+  { id: number; entryId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteWorkOrderServiceEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteWorkOrderServiceEntry>>,
+    { id: number; entryId: number }
+  > = (props) => {
+    const { id, entryId } = props ?? {};
+
+    return deleteWorkOrderServiceEntry(id, entryId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteWorkOrderServiceEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteWorkOrderServiceEntry>>
+>;
+
+export type DeleteWorkOrderServiceEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an after-sales service entry
+ */
+export const useDeleteWorkOrderServiceEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteWorkOrderServiceEntry>>,
+    TError,
+    { id: number; entryId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteWorkOrderServiceEntry>>,
+  TError,
+  { id: number; entryId: number },
+  TContext
+> => {
+  return useMutation(getDeleteWorkOrderServiceEntryMutationOptions(options));
 };
 
 /**

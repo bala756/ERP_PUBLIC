@@ -64,6 +64,13 @@ export const workOrdersTable = pgTable("work_orders", {
   }),
   customerName: text("customer_name").notNull(),
   company: text("company"),
+  customerGstin: varchar("customer_gstin", { length: 32 }),
+  billingAddress: text("billing_address"),
+  shippingAddress: text("shipping_address"),
+  contactPhone: varchar("contact_phone", { length: 32 }),
+  contactEmail: varchar("contact_email", { length: 128 }),
+  dispatchDate: text("dispatch_date"),
+  warrantyPeriodMonths: integer("warranty_period_months"),
   total: text("total").notNull().default("0"),
   status: workOrderStatusEnum("status").notNull().default("draft"),
   notes: text("notes"),
@@ -78,6 +85,25 @@ export const workOrdersTable = pgTable("work_orders", {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+export const workOrderServiceEntriesTable = pgTable(
+  "work_order_service_entries",
+  {
+    id: serial("id").primaryKey(),
+    workOrderId: integer("work_order_id")
+      .notNull()
+      .references(() => workOrdersTable.id, { onDelete: "cascade" }),
+    entryDate: text("entry_date").notNull(),
+    technicianName: text("technician_name").notNull(),
+    description: text("description").notNull(),
+    createdById: integer("created_by_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
 
 export const workOrderItemsTable = pgTable("work_order_items", {
   id: serial("id").primaryKey(),
@@ -218,6 +244,21 @@ export const workOrdersRelations = relations(
     items: many(workOrderItemsTable),
     purchaseOrders: many(purchaseOrdersTable),
     deliveries: many(deliveryRecordsTable),
+    serviceEntries: many(workOrderServiceEntriesTable),
+  }),
+);
+
+export const workOrderServiceEntriesRelations = relations(
+  workOrderServiceEntriesTable,
+  ({ one }) => ({
+    workOrder: one(workOrdersTable, {
+      fields: [workOrderServiceEntriesTable.workOrderId],
+      references: [workOrdersTable.id],
+    }),
+    createdBy: one(usersTable, {
+      fields: [workOrderServiceEntriesTable.createdById],
+      references: [usersTable.id],
+    }),
   }),
 );
 
@@ -284,6 +325,7 @@ export const deliveryRelations = relations(
 );
 
 export type WorkOrder = typeof workOrdersTable.$inferSelect;
+export type WorkOrderServiceEntry = typeof workOrderServiceEntriesTable.$inferSelect;
 export type WorkOrderItem = typeof workOrderItemsTable.$inferSelect;
 export type PurchaseOrder = typeof purchaseOrdersTable.$inferSelect;
 export type PoLineItem = typeof poLineItemsTable.$inferSelect;

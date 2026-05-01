@@ -442,12 +442,29 @@ export const WorkOrderStatus = {
   cancelled: "cancelled",
 } as const;
 
+export interface WorkOrderServiceEntry {
+  id: number;
+  workOrderId: number;
+  entryDate: string;
+  technicianName: string;
+  description: string;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
 export interface WorkOrder {
   id: number;
   woNumber: string;
   proposalId?: number | null;
   customerName: string;
   company?: string | null;
+  customerGstin?: string | null;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  dispatchDate?: string | null;
+  warrantyPeriodMonths?: number | null;
   total: number;
   status: WorkOrderStatus;
   notes?: string | null;
@@ -456,6 +473,19 @@ export interface WorkOrder {
   items: WorkOrderItem[];
   deliveries: DeliveryRecord[];
   purchaseOrders: PurchaseOrder[];
+  serviceEntries: WorkOrderServiceEntry[];
+}
+
+export interface CreateWorkOrderServiceEntryBody {
+  entryDate: string;
+  technicianName: string;
+  description: string;
+}
+
+export interface UpdateWorkOrderServiceEntryBody {
+  entryDate?: string;
+  technicianName?: string;
+  description?: string;
 }
 
 export type CreateWorkOrderBodyItemsItemWorkflowType =
@@ -482,6 +512,13 @@ export interface CreateWorkOrderBody {
   proposalId?: number;
   customerName: string;
   company?: string;
+  customerGstin?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  dispatchDate?: string;
+  warrantyPeriodMonths?: number;
   total?: number;
   notes?: string;
   items?: CreateWorkOrderBodyItemsItem[];
@@ -502,6 +539,14 @@ export interface UpdateWorkOrderBody {
   status?: UpdateWorkOrderBodyStatus;
   notes?: string;
   customerName?: string;
+  company?: string | null;
+  customerGstin?: string | null;
+  billingAddress?: string | null;
+  shippingAddress?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  dispatchDate?: string | null;
+  warrantyPeriodMonths?: number | null;
 }
 
 export type UpdateWorkOrderItemBodyWorkflowType =
@@ -1817,6 +1862,8 @@ export interface WorkOrderPnl {
   marginPercent: number;
   invoiceCount: number;
   storesOutCount: number;
+  /** Order value minus total cost (positive = profit headroom) */
+  projectVsExpense: number;
 }
 
 export type WorkOrderPnlRow = WorkOrderPnl;

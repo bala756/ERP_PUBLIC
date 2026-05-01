@@ -717,6 +717,102 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkOrder"
 
+  /work-orders/{id}/service-entries:
+    get:
+      operationId: getWorkOrderServiceEntries
+      tags: [work-orders]
+      summary: List after-sales service entries for a work order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Service entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkOrderServiceEntry"
+    post:
+      operationId: createWorkOrderServiceEntry
+      tags: [work-orders]
+      summary: Add an after-sales service entry to a work order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkOrderServiceEntryBody"
+      responses:
+        "201":
+          description: Created service entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrderServiceEntry"
+
+  /work-orders/{id}/service-entries/{entryId}:
+    patch:
+      operationId: updateWorkOrderServiceEntry
+      tags: [work-orders]
+      summary: Update an after-sales service entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkOrderServiceEntryBody"
+      responses:
+        "200":
+          description: Updated service entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrderServiceEntry"
+    delete:
+      operationId: deleteWorkOrderServiceEntry
+      tags: [work-orders]
+      summary: Delete an after-sales service entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   /purchase-orders:
     get:
       operationId: getPurchaseOrders
@@ -3197,6 +3293,27 @@ components:
         company:
           type: string
           nullable: true
+        customerGstin:
+          type: string
+          nullable: true
+        billingAddress:
+          type: string
+          nullable: true
+        shippingAddress:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        dispatchDate:
+          type: string
+          nullable: true
+        warrantyPeriodMonths:
+          type: integer
+          nullable: true
         total:
           type: number
         status:
@@ -3221,6 +3338,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PurchaseOrder"
+        serviceEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkOrderServiceEntry"
       required:
         - id
         - woNumber
@@ -3232,6 +3353,57 @@ components:
         - items
         - deliveries
         - purchaseOrders
+        - serviceEntries
+
+    WorkOrderServiceEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        workOrderId:
+          type: integer
+        entryDate:
+          type: string
+        technicianName:
+          type: string
+        description:
+          type: string
+        createdByName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - workOrderId
+        - entryDate
+        - technicianName
+        - description
+        - createdAt
+
+    CreateWorkOrderServiceEntryBody:
+      type: object
+      properties:
+        entryDate:
+          type: string
+        technicianName:
+          type: string
+        description:
+          type: string
+      required:
+        - entryDate
+        - technicianName
+        - description
+
+    UpdateWorkOrderServiceEntryBody:
+      type: object
+      properties:
+        entryDate:
+          type: string
+        technicianName:
+          type: string
+        description:
+          type: string
 
     CreateWorkOrderBody:
       type: object
@@ -3242,6 +3414,20 @@ components:
           type: string
         company:
           type: string
+        customerGstin:
+          type: string
+        billingAddress:
+          type: string
+        shippingAddress:
+          type: string
+        contactPhone:
+          type: string
+        contactEmail:
+          type: string
+        dispatchDate:
+          type: string
+        warrantyPeriodMonths:
+          type: integer
         total:
           type: number
         notes:
@@ -3288,6 +3474,30 @@ components:
           type: string
         customerName:
           type: string
+        company:
+          type: string
+          nullable: true
+        customerGstin:
+          type: string
+          nullable: true
+        billingAddress:
+          type: string
+          nullable: true
+        shippingAddress:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        dispatchDate:
+          type: string
+          nullable: true
+        warrantyPeriodMonths:
+          type: integer
+          nullable: true
 
     UpdateWorkOrderItemBody:
       type: object
@@ -5625,6 +5835,9 @@ components:
           type: integer
         storesOutCount:
           type: integer
+        projectVsExpense:
+          type: number
+          description: Order value minus total cost (positive = profit headroom)
       required:
         - workOrderId
         - workOrderNumber
@@ -5641,6 +5854,7 @@ components:
         - marginPercent
         - invoiceCount
         - storesOutCount
+        - projectVsExpense
 
     WorkOrderPnlRow:
       $ref: "#/components/schemas/WorkOrderPnl"

@@ -676,6 +676,13 @@ export const GetWorkOrdersResponseItem = zod.object({
   proposalId: zod.number().nullish(),
   customerName: zod.string(),
   company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
   total: zod.number(),
   status: zod.enum([
     "draft",
@@ -828,6 +835,17 @@ export const GetWorkOrdersResponseItem = zod.object({
       updatedAt: zod.string(),
     }),
   ),
+  serviceEntries: zod.array(
+    zod.object({
+      id: zod.number(),
+      workOrderId: zod.number(),
+      entryDate: zod.string(),
+      technicianName: zod.string(),
+      description: zod.string(),
+      createdByName: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
 });
 export const GetWorkOrdersResponse = zod.array(GetWorkOrdersResponseItem);
 
@@ -838,6 +856,13 @@ export const CreateWorkOrderBody = zod.object({
   proposalId: zod.number().optional(),
   customerName: zod.string(),
   company: zod.string().optional(),
+  customerGstin: zod.string().optional(),
+  billingAddress: zod.string().optional(),
+  shippingAddress: zod.string().optional(),
+  contactPhone: zod.string().optional(),
+  contactEmail: zod.string().optional(),
+  dispatchDate: zod.string().optional(),
+  warrantyPeriodMonths: zod.number().optional(),
   total: zod.number().optional(),
   notes: zod.string().optional(),
   items: zod
@@ -870,6 +895,13 @@ export const GetWorkOrderResponse = zod.object({
   proposalId: zod.number().nullish(),
   customerName: zod.string(),
   company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
   total: zod.number(),
   status: zod.enum([
     "draft",
@@ -1020,6 +1052,17 @@ export const GetWorkOrderResponse = zod.object({
       ),
       createdAt: zod.string(),
       updatedAt: zod.string(),
+    }),
+  ),
+  serviceEntries: zod.array(
+    zod.object({
+      id: zod.number(),
+      workOrderId: zod.number(),
+      entryDate: zod.string(),
+      technicianName: zod.string(),
+      description: zod.string(),
+      createdByName: zod.string().nullish(),
+      createdAt: zod.string(),
     }),
   ),
 });
@@ -1037,6 +1080,14 @@ export const UpdateWorkOrderBody = zod.object({
     .optional(),
   notes: zod.string().optional(),
   customerName: zod.string().optional(),
+  company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
 });
 
 export const UpdateWorkOrderResponse = zod.object({
@@ -1045,6 +1096,13 @@ export const UpdateWorkOrderResponse = zod.object({
   proposalId: zod.number().nullish(),
   customerName: zod.string(),
   company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
   total: zod.number(),
   status: zod.enum([
     "draft",
@@ -1195,6 +1253,17 @@ export const UpdateWorkOrderResponse = zod.object({
       ),
       createdAt: zod.string(),
       updatedAt: zod.string(),
+    }),
+  ),
+  serviceEntries: zod.array(
+    zod.object({
+      id: zod.number(),
+      workOrderId: zod.number(),
+      entryDate: zod.string(),
+      technicianName: zod.string(),
+      description: zod.string(),
+      createdByName: zod.string().nullish(),
+      createdAt: zod.string(),
     }),
   ),
 });
@@ -1219,6 +1288,13 @@ export const UpdateWorkOrderItemResponse = zod.object({
   proposalId: zod.number().nullish(),
   customerName: zod.string(),
   company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
   total: zod.number(),
   status: zod.enum([
     "draft",
@@ -1369,6 +1445,17 @@ export const UpdateWorkOrderItemResponse = zod.object({
       ),
       createdAt: zod.string(),
       updatedAt: zod.string(),
+    }),
+  ),
+  serviceEntries: zod.array(
+    zod.object({
+      id: zod.number(),
+      workOrderId: zod.number(),
+      entryDate: zod.string(),
+      technicianName: zod.string(),
+      description: zod.string(),
+      createdByName: zod.string().nullish(),
+      createdAt: zod.string(),
     }),
   ),
 });
@@ -1411,6 +1498,13 @@ export const UpsertDeliveryResponse = zod.object({
   proposalId: zod.number().nullish(),
   customerName: zod.string(),
   company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
   total: zod.number(),
   status: zod.enum([
     "draft",
@@ -1563,6 +1657,17 @@ export const UpsertDeliveryResponse = zod.object({
       updatedAt: zod.string(),
     }),
   ),
+  serviceEntries: zod.array(
+    zod.object({
+      id: zod.number(),
+      workOrderId: zod.number(),
+      entryDate: zod.string(),
+      technicianName: zod.string(),
+      description: zod.string(),
+      createdByName: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
 });
 
 /**
@@ -1579,6 +1684,13 @@ export const GenerateInvoiceResponse = zod.object({
     proposalId: zod.number().nullish(),
     customerName: zod.string(),
     company: zod.string().nullish(),
+    customerGstin: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+    shippingAddress: zod.string().nullish(),
+    contactPhone: zod.string().nullish(),
+    contactEmail: zod.string().nullish(),
+    dispatchDate: zod.string().nullish(),
+    warrantyPeriodMonths: zod.number().nullish(),
     total: zod.number(),
     status: zod.enum([
       "draft",
@@ -1731,6 +1843,17 @@ export const GenerateInvoiceResponse = zod.object({
         updatedAt: zod.string(),
       }),
     ),
+    serviceEntries: zod.array(
+      zod.object({
+        id: zod.number(),
+        workOrderId: zod.number(),
+        entryDate: zod.string(),
+        technicianName: zod.string(),
+        description: zod.string(),
+        createdByName: zod.string().nullish(),
+        createdAt: zod.string(),
+      }),
+    ),
   }),
   invoiceNumber: zod.string(),
 });
@@ -1749,6 +1872,13 @@ export const MarkFinishedGoodsResponse = zod.object({
   proposalId: zod.number().nullish(),
   customerName: zod.string(),
   company: zod.string().nullish(),
+  customerGstin: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  shippingAddress: zod.string().nullish(),
+  contactPhone: zod.string().nullish(),
+  contactEmail: zod.string().nullish(),
+  dispatchDate: zod.string().nullish(),
+  warrantyPeriodMonths: zod.number().nullish(),
   total: zod.number(),
   status: zod.enum([
     "draft",
@@ -1901,6 +2031,87 @@ export const MarkFinishedGoodsResponse = zod.object({
       updatedAt: zod.string(),
     }),
   ),
+  serviceEntries: zod.array(
+    zod.object({
+      id: zod.number(),
+      workOrderId: zod.number(),
+      entryDate: zod.string(),
+      technicianName: zod.string(),
+      description: zod.string(),
+      createdByName: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary List after-sales service entries for a work order
+ */
+export const GetWorkOrderServiceEntriesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetWorkOrderServiceEntriesResponseItem = zod.object({
+  id: zod.number(),
+  workOrderId: zod.number(),
+  entryDate: zod.string(),
+  technicianName: zod.string(),
+  description: zod.string(),
+  createdByName: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const GetWorkOrderServiceEntriesResponse = zod.array(
+  GetWorkOrderServiceEntriesResponseItem,
+);
+
+/**
+ * @summary Add an after-sales service entry to a work order
+ */
+export const CreateWorkOrderServiceEntryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateWorkOrderServiceEntryBody = zod.object({
+  entryDate: zod.string(),
+  technicianName: zod.string(),
+  description: zod.string(),
+});
+
+/**
+ * @summary Update an after-sales service entry
+ */
+export const UpdateWorkOrderServiceEntryParams = zod.object({
+  id: zod.coerce.number(),
+  entryId: zod.coerce.number(),
+});
+
+export const UpdateWorkOrderServiceEntryBody = zod.object({
+  entryDate: zod.string().optional(),
+  technicianName: zod.string().optional(),
+  description: zod.string().optional(),
+});
+
+export const UpdateWorkOrderServiceEntryResponse = zod.object({
+  id: zod.number(),
+  workOrderId: zod.number(),
+  entryDate: zod.string(),
+  technicianName: zod.string(),
+  description: zod.string(),
+  createdByName: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete an after-sales service entry
+ */
+export const DeleteWorkOrderServiceEntryParams = zod.object({
+  id: zod.coerce.number(),
+  entryId: zod.coerce.number(),
+});
+
+export const DeleteWorkOrderServiceEntryResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
 });
 
 /**
@@ -3859,6 +4070,9 @@ export const GetWorkOrderPnlResponse = zod.object({
   marginPercent: zod.number(),
   invoiceCount: zod.number(),
   storesOutCount: zod.number(),
+  projectVsExpense: zod
+    .number()
+    .describe("Order value minus total cost (positive = profit headroom)"),
 });
 
 /**
@@ -3880,6 +4094,9 @@ export const GetWorkOrderPnlSummaryResponseItem = zod.object({
   marginPercent: zod.number(),
   invoiceCount: zod.number(),
   storesOutCount: zod.number(),
+  projectVsExpense: zod
+    .number()
+    .describe("Order value minus total cost (positive = profit headroom)"),
 });
 export const GetWorkOrderPnlSummaryResponse = zod.array(
   GetWorkOrderPnlSummaryResponseItem,

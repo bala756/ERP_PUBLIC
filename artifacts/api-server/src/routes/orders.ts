@@ -3,6 +3,7 @@ import {
   db,
   workOrdersTable,
   workOrderItemsTable,
+  workOrderServiceEntriesTable,
   purchaseOrdersTable,
   poLineItemsTable,
   subcontractRecordsTable,
@@ -44,6 +45,9 @@ function serializeWO(
     purchaseOrders?: (typeof purchaseOrdersTable.$inferSelect & {
       lineItems?: (typeof poLineItemsTable.$inferSelect)[];
     })[];
+    serviceEntries?: (typeof workOrderServiceEntriesTable.$inferSelect & {
+      createdBy?: { name: string } | null;
+    })[];
   },
 ) {
   return {
@@ -52,11 +56,27 @@ function serializeWO(
     proposalId: wo.proposalId ?? null,
     customerName: wo.customerName,
     company: wo.company ?? null,
+    customerGstin: wo.customerGstin ?? null,
+    billingAddress: wo.billingAddress ?? null,
+    shippingAddress: wo.shippingAddress ?? null,
+    contactPhone: wo.contactPhone ?? null,
+    contactEmail: wo.contactEmail ?? null,
+    dispatchDate: wo.dispatchDate ?? null,
+    warrantyPeriodMonths: wo.warrantyPeriodMonths ?? null,
     total: parseFloat(wo.total),
     status: wo.status,
     notes: wo.notes ?? null,
     createdAt: wo.createdAt.toISOString(),
     updatedAt: wo.updatedAt.toISOString(),
+    serviceEntries: (wo.serviceEntries ?? []).map((se) => ({
+      id: se.id,
+      workOrderId: se.workOrderId,
+      entryDate: se.entryDate,
+      technicianName: se.technicianName,
+      description: se.description,
+      createdByName: se.createdBy?.name ?? null,
+      createdAt: se.createdAt.toISOString(),
+    })),
     items: (wo.items ?? []).map((item) => ({
       id: item.id,
       workOrderId: item.workOrderId,
@@ -169,6 +189,13 @@ const createWOSchema = z.object({
   proposalId: z.number().int().optional(),
   customerName: z.string().min(1),
   company: z.string().optional(),
+  customerGstin: z.string().max(32).optional(),
+  billingAddress: z.string().optional(),
+  shippingAddress: z.string().optional(),
+  contactPhone: z.string().max(32).optional(),
+  contactEmail: z.string().max(128).optional(),
+  dispatchDate: z.string().optional(),
+  warrantyPeriodMonths: z.number().int().min(0).max(600).optional(),
   total: z.number().min(0).default(0),
   notes: z.string().optional(),
   items: z
@@ -194,6 +221,14 @@ const updateWOSchema = z.object({
     .optional(),
   notes: z.string().optional(),
   customerName: z.string().optional(),
+  company: z.string().optional().nullable(),
+  customerGstin: z.string().max(32).optional().nullable(),
+  billingAddress: z.string().optional().nullable(),
+  shippingAddress: z.string().optional().nullable(),
+  contactPhone: z.string().max(32).optional().nullable(),
+  contactEmail: z.string().max(128).optional().nullable(),
+  dispatchDate: z.string().optional().nullable(),
+  warrantyPeriodMonths: z.number().int().min(0).max(600).optional().nullable(),
 });
 
 const updateWOItemSchema = z.object({
@@ -279,6 +314,13 @@ ordersRouter.post("/work-orders", requireRole(...WRITE_ROLES), async (req, res) 
       proposalId: parsed.data.proposalId,
       customerName: parsed.data.customerName,
       company: parsed.data.company,
+      customerGstin: parsed.data.customerGstin,
+      billingAddress: parsed.data.billingAddress,
+      shippingAddress: parsed.data.shippingAddress,
+      contactPhone: parsed.data.contactPhone,
+      contactEmail: parsed.data.contactEmail,
+      dispatchDate: parsed.data.dispatchDate,
+      warrantyPeriodMonths: parsed.data.warrantyPeriodMonths,
       total: parsed.data.total.toString(),
       notes: parsed.data.notes,
       createdById: userId,
@@ -371,6 +413,24 @@ async function getWOWithDetails(id: number) {
     .from(deliveryRecordsTable)
     .where(eq(deliveryRecordsTable.workOrderId, id));
 
+  const serviceEntryRows = await db
+    .select({
+      se: workOrderServiceEntriesTable,
+      createdBy: { name: usersTable.name },
+    })
+    .from(workOrderServiceEntriesTable)
+    .leftJoin(
+      usersTable,
+      eq(workOrderServiceEntriesTable.createdById, usersTable.id),
+    )
+    .where(eq(workOrderServiceEntriesTable.workOrderId, id))
+    .orderBy(desc(workOrderServiceEntriesTable.entryDate));
+
+  const serviceEntries = serviceEntryRows.map((r) => ({
+    ...r.se,
+    createdBy: r.createdBy,
+  }));
+
   const itemsWithDetails = items.map((item) => {
     const poMap = new Map<number, (typeof purchaseOrdersTable.$inferSelect) & { lineItems: (typeof poLineItemsTable.$inferSelect)[]; approvedBy: { name: string } | null }>();
     for (const row of itemPOs) {
@@ -407,6 +467,7 @@ async function getWOWithDetails(id: number) {
     items: itemsWithDetails,
     deliveries,
     purchaseOrders: Array.from(woPOMap.values()),
+    serviceEntries,
   });
 }
 
@@ -542,6 +603,7 @@ ordersRouter.get(
         marginPercent,
         invoiceCount: rev?.invoiceCount ?? 0,
         storesOutCount: cogsEntry?.outCount ?? 0,
+        projectVsExpense: revenueOrderValue - totalCost,
       };
     });
 
@@ -1639,7 +1701,180 @@ ordersRouter.get(
       marginPercent,
       invoiceCount: invoiceRows.length,
       storesOutCount: costRows.length,
+      projectVsExpense: revenueOrderValue - totalCost,
     });
+  },
+);
+
+// ─── Service Entry CRUD ─────────────────────────────────────────────────────
+const createServiceEntrySchema = z.object({
+  entryDate: z.string().min(1),
+  technicianName: z.string().min(1).max(120),
+  description: z.string().min(1),
+});
+
+const updateServiceEntrySchema = z.object({
+  entryDate: z.string().min(1).optional(),
+  technicianName: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).optional(),
+});
+
+ordersRouter.get(
+  "/work-orders/:id/service-entries",
+  requireRole(...VIEW_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const rows = await db
+      .select({
+        se: workOrderServiceEntriesTable,
+        createdBy: { name: usersTable.name },
+      })
+      .from(workOrderServiceEntriesTable)
+      .leftJoin(
+        usersTable,
+        eq(workOrderServiceEntriesTable.createdById, usersTable.id),
+      )
+      .where(eq(workOrderServiceEntriesTable.workOrderId, id))
+      .orderBy(desc(workOrderServiceEntriesTable.entryDate));
+    res.json(
+      rows.map((r) => ({
+        id: r.se.id,
+        workOrderId: r.se.workOrderId,
+        entryDate: r.se.entryDate,
+        technicianName: r.se.technicianName,
+        description: r.se.description,
+        createdByName: r.createdBy?.name ?? null,
+        createdAt: r.se.createdAt.toISOString(),
+      })),
+    );
+  },
+);
+
+ordersRouter.post(
+  "/work-orders/:id/service-entries",
+  requireRole(...WRITE_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const parsed = createServiceEntrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+      return;
+    }
+    const [wo] = await db
+      .select({ id: workOrdersTable.id })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, id));
+    if (!wo) {
+      res.status(404).json({ error: "Work order not found" });
+      return;
+    }
+    const [created] = await db
+      .insert(workOrderServiceEntriesTable)
+      .values({
+        workOrderId: id,
+        entryDate: parsed.data.entryDate,
+        technicianName: parsed.data.technicianName,
+        description: parsed.data.description,
+        createdById: req.session.userId!,
+      })
+      .returning();
+    const [createdByRow] = created.createdById
+      ? await db
+          .select({ name: usersTable.name })
+          .from(usersTable)
+          .where(eq(usersTable.id, created.createdById))
+      : [{ name: null as string | null }];
+    res.status(201).json({
+      id: created.id,
+      workOrderId: created.workOrderId,
+      entryDate: created.entryDate,
+      technicianName: created.technicianName,
+      description: created.description,
+      createdByName: createdByRow?.name ?? null,
+      createdAt: created.createdAt.toISOString(),
+    });
+  },
+);
+
+ordersRouter.patch(
+  "/work-orders/:id/service-entries/:entryId",
+  requireRole(...WRITE_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    const entryId = parseInt(String(req.params.entryId), 10);
+    if (isNaN(id) || isNaN(entryId)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const parsed = updateServiceEntrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+      return;
+    }
+    const [updated] = await db
+      .update(workOrderServiceEntriesTable)
+      .set(parsed.data)
+      .where(
+        and(
+          eq(workOrderServiceEntriesTable.id, entryId),
+          eq(workOrderServiceEntriesTable.workOrderId, id),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Service entry not found" });
+      return;
+    }
+    const [createdByRow] = updated.createdById
+      ? await db
+          .select({ name: usersTable.name })
+          .from(usersTable)
+          .where(eq(usersTable.id, updated.createdById))
+      : [{ name: null as string | null }];
+    res.json({
+      id: updated.id,
+      workOrderId: updated.workOrderId,
+      entryDate: updated.entryDate,
+      technicianName: updated.technicianName,
+      description: updated.description,
+      createdByName: createdByRow?.name ?? null,
+      createdAt: updated.createdAt.toISOString(),
+    });
+  },
+);
+
+ordersRouter.delete(
+  "/work-orders/:id/service-entries/:entryId",
+  requireRole(...WRITE_ROLES),
+  async (req, res) => {
+    const id = parseInt(String(req.params.id), 10);
+    const entryId = parseInt(String(req.params.entryId), 10);
+    if (isNaN(id) || isNaN(entryId)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const result = await db
+      .delete(workOrderServiceEntriesTable)
+      .where(
+        and(
+          eq(workOrderServiceEntriesTable.id, entryId),
+          eq(workOrderServiceEntriesTable.workOrderId, id),
+        ),
+      )
+      .returning({ id: workOrderServiceEntriesTable.id });
+    if (result.length === 0) {
+      res.status(404).json({ error: "Service entry not found" });
+      return;
+    }
+    res.json({ success: true });
   },
 );
 
