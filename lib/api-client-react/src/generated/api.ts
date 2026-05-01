@@ -52,6 +52,7 @@ import type {
   DashboardSummary,
   DeleteInventoryItem200,
   DepartmentRecord,
+  DirectorRejectPurchaseOrderBody,
   Employee,
   EmployeeDetail,
   EmployeePerformance,
@@ -3918,6 +3919,178 @@ export const useRejectPurchaseOrder = <
   TContext
 > => {
   return useMutation(getRejectPurchaseOrderMutationOptions(options));
+};
+
+/**
+ * @summary Director (or admin) approves a pendingDirectorApproval PO — moves it to approved
+ */
+export const getDirectorApprovePurchaseOrderUrl = (id: number) => {
+  return `/api/purchase-orders/${id}/director-approve`;
+};
+
+export const directorApprovePurchaseOrder = async (
+  id: number,
+  options?: RequestInit,
+): Promise<PurchaseOrder> => {
+  return customFetch<PurchaseOrder>(getDirectorApprovePurchaseOrderUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDirectorApprovePurchaseOrderMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof directorApprovePurchaseOrder>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof directorApprovePurchaseOrder>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["directorApprovePurchaseOrder"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof directorApprovePurchaseOrder>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return directorApprovePurchaseOrder(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DirectorApprovePurchaseOrderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof directorApprovePurchaseOrder>>
+>;
+
+export type DirectorApprovePurchaseOrderMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Director (or admin) approves a pendingDirectorApproval PO — moves it to approved
+ */
+export const useDirectorApprovePurchaseOrder = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof directorApprovePurchaseOrder>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof directorApprovePurchaseOrder>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDirectorApprovePurchaseOrderMutationOptions(options));
+};
+
+/**
+ * @summary Director (or admin) rejects a pendingDirectorApproval PO
+ */
+export const getDirectorRejectPurchaseOrderUrl = (id: number) => {
+  return `/api/purchase-orders/${id}/director-reject`;
+};
+
+export const directorRejectPurchaseOrder = async (
+  id: number,
+  directorRejectPurchaseOrderBody?: DirectorRejectPurchaseOrderBody,
+  options?: RequestInit,
+): Promise<PurchaseOrder> => {
+  return customFetch<PurchaseOrder>(getDirectorRejectPurchaseOrderUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(directorRejectPurchaseOrderBody),
+  });
+};
+
+export const getDirectorRejectPurchaseOrderMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof directorRejectPurchaseOrder>>,
+    TError,
+    { id: number; data: BodyType<DirectorRejectPurchaseOrderBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof directorRejectPurchaseOrder>>,
+  TError,
+  { id: number; data: BodyType<DirectorRejectPurchaseOrderBody> },
+  TContext
+> => {
+  const mutationKey = ["directorRejectPurchaseOrder"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof directorRejectPurchaseOrder>>,
+    { id: number; data: BodyType<DirectorRejectPurchaseOrderBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return directorRejectPurchaseOrder(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DirectorRejectPurchaseOrderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof directorRejectPurchaseOrder>>
+>;
+export type DirectorRejectPurchaseOrderMutationBody =
+  BodyType<DirectorRejectPurchaseOrderBody>;
+export type DirectorRejectPurchaseOrderMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Director (or admin) rejects a pendingDirectorApproval PO
+ */
+export const useDirectorRejectPurchaseOrder = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof directorRejectPurchaseOrder>>,
+    TError,
+    { id: number; data: BodyType<DirectorRejectPurchaseOrderBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof directorRejectPurchaseOrder>>,
+  TError,
+  { id: number; data: BodyType<DirectorRejectPurchaseOrderBody> },
+  TContext
+> => {
+  return useMutation(getDirectorRejectPurchaseOrderMutationOptions(options));
 };
 
 /**

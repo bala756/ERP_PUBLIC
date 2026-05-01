@@ -375,6 +375,7 @@ export type PurchaseOrderStatus =
 export const PurchaseOrderStatus = {
   draft: "draft",
   pendingApproval: "pendingApproval",
+  pendingDirectorApproval: "pendingDirectorApproval",
   approved: "approved",
   received: "received",
   cancelled: "cancelled",
@@ -387,11 +388,16 @@ export interface PurchaseOrder {
   workOrderItemId?: number | null;
   supplierName: string;
   supplierContact?: string | null;
+  supplierGstin?: string | null;
+  paymentTerms?: string | null;
+  deliveryDate?: string | null;
+  warrantyText?: string | null;
   type: PurchaseOrderType;
   quotedAmount: number;
   poAmount: number;
   status: PurchaseOrderStatus;
   requiresCfoApproval: boolean;
+  requiresDirectorApproval: boolean;
   approvedById?: number | null;
   approvedByName?: string | null;
   approvedAt?: string | null;
@@ -621,6 +627,10 @@ export interface CreatePurchaseOrderBody {
   workOrderItemId?: number;
   supplierName: string;
   supplierContact?: string;
+  supplierGstin?: string;
+  paymentTerms?: string;
+  deliveryDate?: string;
+  warrantyText?: string;
   type?: CreatePurchaseOrderBodyType;
   quotedAmount?: number;
   poAmount?: number;
@@ -1928,6 +1938,10 @@ export type GetPurchaseOrdersParams = {
 };
 
 export type RejectPurchaseOrderBody = {
+  rejectionNote?: string;
+};
+
+export type DirectorRejectPurchaseOrderBody = {
   rejectionNote?: string;
 };
 

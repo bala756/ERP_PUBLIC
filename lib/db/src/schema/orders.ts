@@ -43,6 +43,7 @@ export const workOrderItemStepEnum = pgEnum("wo_item_step", [
 export const poStatusEnum = pgEnum("po_status", [
   "draft",
   "pendingApproval",
+  "pendingDirectorApproval",
   "approved",
   "received",
   "cancelled",
@@ -144,11 +145,18 @@ export const purchaseOrdersTable = pgTable("purchase_orders", {
   ),
   supplierName: text("supplier_name").notNull(),
   supplierContact: text("supplier_contact"),
+  supplierGstin: varchar("supplier_gstin", { length: 32 }),
+  paymentTerms: text("payment_terms"),
+  deliveryDate: text("delivery_date"),
+  warrantyText: text("warranty_text"),
   type: poTypeEnum("type").notNull().default("imported"),
   quotedAmount: text("quoted_amount").notNull().default("0"),
   poAmount: text("po_amount").notNull().default("0"),
   status: poStatusEnum("status").notNull().default("draft"),
   requiresCfoApproval: boolean("requires_cfo_approval")
+    .notNull()
+    .default(false),
+  requiresDirectorApproval: boolean("requires_director_approval")
     .notNull()
     .default(false),
   approvedById: integer("approved_by_id").references(() => usersTable.id, {

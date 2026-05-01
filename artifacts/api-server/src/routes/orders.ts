@@ -137,11 +137,16 @@ function serializePO(
     workOrderItemId: po.workOrderItemId ?? null,
     supplierName: po.supplierName,
     supplierContact: po.supplierContact ?? null,
+    supplierGstin: po.supplierGstin ?? null,
+    paymentTerms: po.paymentTerms ?? null,
+    deliveryDate: po.deliveryDate ?? null,
+    warrantyText: po.warrantyText ?? null,
     type: po.type,
     quotedAmount: parseFloat(po.quotedAmount),
     poAmount: parseFloat(po.poAmount),
     status: po.status,
     requiresCfoApproval: po.requiresCfoApproval,
+    requiresDirectorApproval: po.requiresDirectorApproval,
     approvedById: po.approvedById ?? null,
     approvedByName: po.approvedBy?.name ?? null,
     approvedAt: po.approvedAt?.toISOString() ?? null,
@@ -258,6 +263,10 @@ const createPOSchema = z.object({
   workOrderItemId: z.number().int().optional(),
   supplierName: z.string().min(1),
   supplierContact: z.string().optional(),
+  supplierGstin: z.string().max(32).optional(),
+  paymentTerms: z.string().optional(),
+  deliveryDate: z.string().optional(),
+  warrantyText: z.string().optional(),
   type: z.enum(["imported", "rawMaterial"]).default("imported"),
   quotedAmount: z.number().min(0).default(0),
   poAmount: z.number().min(0).default(0),
@@ -799,6 +808,31 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
   const priceDiff = Math.abs(rest.quotedAmount - rest.poAmount);
   const requiresCfoApproval = priceDiff > 0;
 
+  // Check each line item's unit price against master defaultPurchasePrice.
+  // If ANY line differs from master, the PO requires Director approval before
+  // it can be approved, received, or moved through the normal flow.
+  let requiresDirectorApproval = false;
+  const productIds = lineItems
+    .map((li) => li.productId)
+    .filter((id): id is number => typeof id === "number" && id > 0);
+  if (productIds.length > 0) {
+    const masterItems = await db
+      .select({ id: inventoryItemsTable.id, defaultPurchasePrice: inventoryItemsTable.defaultPurchasePrice })
+      .from(inventoryItemsTable)
+      .where(inArray(inventoryItemsTable.id, productIds));
+    const masterMap = new Map(
+      masterItems.map((m) => [m.id, parseFloat(m.defaultPurchasePrice ?? "0")]),
+    );
+    for (const li of lineItems) {
+      if (!li.productId) continue;
+      const master = masterMap.get(li.productId);
+      if (master !== undefined && Math.abs(li.unitPrice - master) > 0.001) {
+        requiresDirectorApproval = true;
+        break;
+      }
+    }
+  }
+
   const poNumber = await generatePoNumber();
   const userId = req.session.userId;
 
@@ -810,7 +844,8 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
       quotedAmount: rest.quotedAmount.toString(),
       poAmount: rest.poAmount.toString(),
       requiresCfoApproval,
-      status: "pendingApproval",
+      requiresDirectorApproval,
+      status: requiresDirectorApproval ? "pendingDirectorApproval" : "pendingApproval",
       createdById: userId,
     })
     .returning();

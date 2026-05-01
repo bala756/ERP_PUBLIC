@@ -958,6 +958,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/PurchaseOrder"
 
+  /purchase-orders/{id}/director-approve:
+    post:
+      operationId: directorApprovePurchaseOrder
+      tags: [purchase-orders]
+      summary: Director (or admin) approves a pendingDirectorApproval PO — moves it to approved
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: PO approved by director
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/{id}/director-reject:
+    post:
+      operationId: directorRejectPurchaseOrder
+      tags: [purchase-orders]
+      summary: Director (or admin) rejects a pendingDirectorApproval PO
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejectionNote:
+                  type: string
+      responses:
+        "200":
+          description: PO rejected by director
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
   /purchase-orders/{id}/receive:
     post:
       operationId: receivePurchaseOrder
@@ -3168,6 +3215,18 @@ components:
         supplierContact:
           type: string
           nullable: true
+        supplierGstin:
+          type: string
+          nullable: true
+        paymentTerms:
+          type: string
+          nullable: true
+        deliveryDate:
+          type: string
+          nullable: true
+        warrantyText:
+          type: string
+          nullable: true
         type:
           type: string
           enum: [imported, rawMaterial]
@@ -3177,8 +3236,10 @@ components:
           type: number
         status:
           type: string
-          enum: [draft, pendingApproval, approved, received, cancelled]
+          enum: [draft, pendingApproval, pendingDirectorApproval, approved, received, cancelled]
         requiresCfoApproval:
+          type: boolean
+        requiresDirectorApproval:
           type: boolean
         approvedById:
           type: integer
@@ -3219,6 +3280,7 @@ components:
         - poAmount
         - status
         - requiresCfoApproval
+        - requiresDirectorApproval
         - lineItems
         - createdAt
         - updatedAt
@@ -3567,6 +3629,14 @@ components:
         supplierName:
           type: string
         supplierContact:
+          type: string
+        supplierGstin:
+          type: string
+        paymentTerms:
+          type: string
+        deliveryDate:
+          type: string
+        warrantyText:
           type: string
         type:
           type: string
