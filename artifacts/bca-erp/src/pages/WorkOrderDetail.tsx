@@ -425,7 +425,7 @@ export default function WorkOrderDetail() {
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     {item.productImageUrl ? (
                       <img
-                        src={item.productImageUrl}
+                        src={objectPathToUrl(item.productImageUrl)}
                         alt={item.description}
                         className="w-14 h-14 rounded border object-cover bg-white shrink-0"
                       />
