@@ -12,6 +12,7 @@ import {
   gstInvoicesTable,
   invoiceLineItemsTable,
   stockMovementsTable,
+  stockTransactionsTable,
   subcontractJobsTable,
   inventoryItemsTable,
 } from "@workspace/db";
@@ -1005,6 +1006,30 @@ ordersRouter.post(
       });
     if (movementInserts.length > 0) {
       await db.insert(stockMovementsTable).values(movementInserts);
+      // Also mirror each receipt into stock_transactions so that the
+      // legacy on-hand ledger (used by Product Master + Stores Out
+      // pickers) reflects the new stock immediately. Wrapped in
+      // try/catch so a partial mirror failure cannot poison the
+      // canonical movements ledger we just wrote.
+      try {
+        await db.insert(stockTransactionsTable).values(
+          movementInserts.map((m) => ({
+            itemId: m.itemId,
+            type: "in" as const,
+            qty: m.qty,
+            rate: m.unitCost,
+            referenceType: "purchaseOrder" as const,
+            referenceNumber: po.poNumber,
+            notes: m.notes ?? null,
+            createdById: req.session.userId ?? null,
+          })),
+        );
+      } catch (err) {
+        logger.error(
+          { poId: id, err },
+          "PO receive: stock_transactions mirror failed (stock_movements still posted)",
+        );
+      }
     }
 
     logger.info(
