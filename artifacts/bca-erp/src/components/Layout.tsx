@@ -39,6 +39,7 @@ import {
   Wrench,
   CheckSquare,
   Settings,
+  Route,
   LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -109,6 +110,7 @@ const SECTIONS = [
     title: "Admin",
     items: [
       { title: "Users", url: "/users", icon: Users, roles: ["admin", "director"] },
+      { title: "Lead Routing", url: "/admin/lead-routing", icon: Route, roles: ["admin", "director", "cfo"] },
       { title: "Settings", url: "/settings", icon: Settings, roles: ["director", "cfo", "manager", "accounts", "purchase", "sales", "stores", "production", "service", "admin"] },
     ],
   },

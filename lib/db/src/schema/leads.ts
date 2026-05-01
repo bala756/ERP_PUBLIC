@@ -42,6 +42,8 @@ export const leadsTable = pgTable("leads", {
   gstNumber: text("gst_number"),
   billingAddress: text("billing_address"),
   deliveryAddress: text("delivery_address"),
+  state: text("state"),
+  city: text("city"),
   source: leadSourceEnum("source").notNull().default("other"),
   productInterest: text("product_interest"),
   notes: text("notes"),

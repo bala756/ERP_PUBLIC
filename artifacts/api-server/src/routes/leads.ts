@@ -4,6 +4,8 @@ import { eq, and, or, ilike, desc, lt, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { z } from "zod";
 import { logger } from "../lib/logger";
+import { autoAssignLead } from "../lib/leadRouting";
+import { logLeadActivity } from "../lib/leadActivities";
 
 const leadsRouter = Router();
 
@@ -18,6 +20,8 @@ const createLeadSchema = z.object({
   gstNumber: z.string().optional(),
   billingAddress: z.string().optional(),
   deliveryAddress: z.string().optional(),
+  state: z.string().optional(),
+  city: z.string().optional(),
   source: z
     .enum(["indiaMart", "website", "referral", "direct", "other"])
     .default("other"),
@@ -48,6 +52,8 @@ function serializeLead(
     gstNumber: lead.gstNumber ?? null,
     billingAddress: lead.billingAddress ?? null,
     deliveryAddress: lead.deliveryAddress ?? null,
+    state: lead.state ?? null,
+    city: lead.city ?? null,
     source: lead.source,
     productInterest: lead.productInterest ?? null,
     notes: lead.notes ?? null,
@@ -111,10 +117,60 @@ leadsRouter.post("/leads", requireRole(...SALES_ROLES), async (req, res) => {
   }
 
   const { lastFollowupAt, ...leadData } = parsed.data;
-  const [lead] = await db.insert(leadsTable).values({
-    ...leadData,
-    lastFollowupAt: lastFollowupAt ? new Date(lastFollowupAt) : undefined,
-  }).returning();
+
+  let assignedToId = leadData.assignedToId ?? null;
+  let autoMatch = null as Awaited<ReturnType<typeof autoAssignLead>>;
+  if (!assignedToId) {
+    autoMatch = await autoAssignLead({
+      state: leadData.state ?? null,
+      productInterest: leadData.productInterest ?? null,
+      billingAddress: leadData.billingAddress ?? null,
+      deliveryAddress: leadData.deliveryAddress ?? null,
+      notes: leadData.notes ?? null,
+    });
+    if (autoMatch) {
+      assignedToId = autoMatch.salespersonId;
+    }
+  }
+
+  const [lead] = await db
+    .insert(leadsTable)
+    .values({
+      ...leadData,
+      assignedToId,
+      lastFollowupAt: lastFollowupAt ? new Date(lastFollowupAt) : undefined,
+    })
+    .returning();
+
+  await logLeadActivity({
+    leadId: lead.id,
+    type: "created",
+    actorUserId: req.session.userId ?? null,
+    payload: { source: lead.source },
+  });
+
+  if (autoMatch) {
+    await logLeadActivity({
+      leadId: lead.id,
+      type: "assignmentChanged",
+      actorUserId: null,
+      payload: {
+        auto: true,
+        ruleId: autoMatch.ruleId,
+        ruleName: autoMatch.ruleName,
+        salespersonId: autoMatch.salespersonId,
+        matchedState: autoMatch.matchedState,
+        matchedKeyword: autoMatch.matchedKeyword,
+      },
+    });
+  } else if (leadData.assignedToId) {
+    await logLeadActivity({
+      leadId: lead.id,
+      type: "assignmentChanged",
+      actorUserId: req.session.userId ?? null,
+      payload: { auto: false, salespersonId: leadData.assignedToId },
+    });
+  }
 
   res.status(201).json(serializeLead(lead));
 });
@@ -181,7 +237,7 @@ leadsRouter.get(
 
 leadsRouter.patch(
   "/leads/:id",
-  requireRole(...SALES_ROLES),
+  requireRole(...SALES_ROLES, "cfo"),
   async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     if (isNaN(id)) {
@@ -196,6 +252,35 @@ leadsRouter.patch(
     }
 
     const { lastFollowupAt, ...updateData } = parsed.data;
+
+    const [before] = await db
+      .select()
+      .from(leadsTable)
+      .where(eq(leadsTable.id, id));
+    if (!before) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+
+    const isReassign =
+      updateData.assignedToId !== undefined &&
+      updateData.assignedToId !== before.assignedToId;
+    if (isReassign) {
+      const role = req.session.userRole ?? "";
+      const ALLOWED_REASSIGN = [
+        "admin",
+        "director",
+        "cfo",
+        "manager",
+      ];
+      if (!ALLOWED_REASSIGN.includes(role)) {
+        res
+          .status(403)
+          .json({ error: "Only managers/directors/admins can reassign leads" });
+        return;
+      }
+    }
+
     const [updated] = await db
       .update(leadsTable)
       .set({
@@ -208,6 +293,62 @@ leadsRouter.patch(
     if (!updated) {
       res.status(404).json({ error: "Lead not found" });
       return;
+    }
+
+    if (updateData.status && updateData.status !== before.status) {
+      await logLeadActivity({
+        leadId: id,
+        type: "statusChanged",
+        actorUserId: req.session.userId ?? null,
+        payload: { from: before.status, to: updateData.status },
+      });
+    }
+
+    if (isReassign) {
+      await logLeadActivity({
+        leadId: id,
+        type: "assignmentChanged",
+        actorUserId: req.session.userId ?? null,
+        payload: {
+          auto: false,
+          from: before.assignedToId,
+          to: updateData.assignedToId,
+        },
+      });
+    }
+
+    const editableFields = [
+      "customerName",
+      "company",
+      "phone",
+      "email",
+      "gstNumber",
+      "billingAddress",
+      "deliveryAddress",
+      "state",
+      "city",
+      "productInterest",
+      "notes",
+    ] as const;
+    const fieldDiff: Record<string, { from: unknown; to: unknown }> = {};
+    for (const f of editableFields) {
+      if (
+        updateData[f] !== undefined &&
+        (before as Record<string, unknown>)[f] !== updateData[f]
+      ) {
+        fieldDiff[f] = {
+          from: (before as Record<string, unknown>)[f],
+          to: updateData[f],
+        };
+      }
+    }
+    if (Object.keys(fieldDiff).length > 0) {
+      await logLeadActivity({
+        leadId: id,
+        type: "fieldEdited",
+        actorUserId: req.session.userId ?? null,
+        payload: { changes: fieldDiff },
+      });
     }
 
     res.json(serializeLead(updated));

@@ -33,6 +33,7 @@ import ExpensesPage from "@/pages/Expenses";
 import GSTSummaryPage from "@/pages/GSTSummary";
 import ImportJobs from "@/pages/ImportJobs";
 import ImportJobDetail from "@/pages/ImportJobDetail";
+import LeadRouting from "@/pages/LeadRouting";
 import {
   ServiceOrders,
   Approvals,
@@ -105,6 +106,7 @@ function Router() {
       <Route path="/gst-summary"><ProtectedRoute><Layout><GSTSummaryPage /></Layout></ProtectedRoute></Route>
       <Route path="/service-orders"><ProtectedRoute><Layout><ServiceOrders /></Layout></ProtectedRoute></Route>
       <Route path="/approvals"><ProtectedRoute><Layout><Approvals /></Layout></ProtectedRoute></Route>
+      <Route path="/admin/lead-routing"><ProtectedRoute><Layout><LeadRouting /></Layout></ProtectedRoute></Route>
 
       <Route>
         <ProtectedRoute>

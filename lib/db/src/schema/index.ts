@@ -2,6 +2,7 @@ export * from "./departments";
 export * from "./users";
 export * from "./sessions";
 export * from "./leads";
+export * from "./lead-enhancements";
 export * from "./orders";
 export * from "./inventory";
 export * from "./employees";

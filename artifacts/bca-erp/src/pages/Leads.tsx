@@ -58,6 +58,14 @@ import {
   FileText,
   RefreshCw,
 } from "lucide-react";
+import {
+  InlineStatusSelect,
+  FollowupPopover,
+} from "@/components/LeadInlineControls";
+import {
+  LeadDetailDrawer,
+  type LeadSummary,
+} from "@/components/LeadDetailDrawer";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -150,6 +158,7 @@ export default function Leads() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editLead, setEditLead] = useState<Lead | null>(null);
+  const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -246,6 +255,7 @@ export default function Leads() {
               <TableHead>Product Interest</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Assigned To</TableHead>
+              <TableHead>Last Follow-up</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-[80px]" />
             </TableRow>
@@ -264,7 +274,7 @@ export default function Leads() {
             ) : !leads?.length ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-center py-12 text-muted-foreground"
                 >
                   No leads found. {canWrite && "Create your first lead to get started."}
@@ -272,23 +282,54 @@ export default function Leads() {
               </TableRow>
             ) : (
               leads.map((lead) => (
-                <TableRow key={lead.id} data-testid={`lead-row-${lead.id}`}>
+                <TableRow
+                  key={lead.id}
+                  data-testid={`lead-row-${lead.id}`}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setDrawerLead(lead)}
+                >
                   <TableCell className="font-medium">{lead.customerName}</TableCell>
                   <TableCell>{lead.company ?? "—"}</TableCell>
                   <TableCell>{SOURCE_LABELS[lead.source] ?? lead.source}</TableCell>
                   <TableCell className="max-w-[180px] truncate">
                     {lead.productInterest ?? "—"}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[lead.status] ?? "secondary"}>
-                      {STATUS_LABELS[lead.status] ?? lead.status}
-                    </Badge>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {canWrite ? (
+                      <InlineStatusSelect
+                        leadId={lead.id}
+                        currentStatus={lead.status}
+                      />
+                    ) : (
+                      <Badge variant={STATUS_VARIANT[lead.status] ?? "secondary"}>
+                        {STATUS_LABELS[lead.status] ?? lead.status}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>{lead.assignedToName ?? "—"}</TableCell>
+                  <TableCell className="max-w-[200px]">
+                    <div className="flex items-center gap-2">
+                      {lead.lastFollowupNote ? (
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs truncate" title={lead.lastFollowupNote}>
+                            {lead.lastFollowupNote}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {lead.lastFollowupAt
+                              ? new Date(lead.lastFollowupAt).toLocaleDateString("en-IN")
+                              : ""}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground flex-1">—</span>
+                      )}
+                      {canWrite && <FollowupPopover leadId={lead.id} />}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {new Date(lead.createdAt).toLocaleDateString("en-IN")}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <LeadActions
                       lead={lead}
                       canWrite={!!canWrite}
@@ -319,6 +360,11 @@ export default function Leads() {
           onClose={() => setEditLead(null)}
         />
       )}
+
+      <LeadDetailDrawer
+        lead={drawerLead as LeadSummary | null}
+        onClose={() => setDrawerLead(null)}
+      />
     </div>
   );
 }

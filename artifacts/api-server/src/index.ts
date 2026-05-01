@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { db, proposalsTable, workOrdersTable, purchaseOrdersTable } from "@workspace/db";
 import { and, eq, lt } from "drizzle-orm";
+import { startIndiaMartPoller } from "./lib/indiaMart";
 
 const rawPort = process.env["PORT"];
 
@@ -112,4 +113,6 @@ app.listen(port, async (err) => {
     { intervalHours: 24 },
     "Scheduled lost-proposal auto-cleanup every 24 h",
   );
+
+  startIndiaMartPoller();
 });
