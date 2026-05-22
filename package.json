@@ -9,14 +9,6 @@
     "typecheck": "pnpm run typecheck:libs && pnpm --filter @workspace/api-server run typecheck && pnpm --filter @workspace/bca-erp run typecheck"
   },
   "private": true,
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@swc/core",
-      "esbuild",
-      "msw",
-      "unrs-resolver"
-    ]
-  },
   "devDependencies": {
     "typescript": "~5.9.2",
     "prettier": "^3.8.1"
