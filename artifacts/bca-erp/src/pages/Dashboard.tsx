@@ -40,6 +40,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { data: summary, isLoading } = useGetDashboardSummary();
   const allowedModules = MODULES.filter(m => user && m.roles.includes(user.role));
+  const displayName = user?.name?.trim() || user?.email || "User";
 
   const showFinance = user && ["accounts", "cfo", "director", "admin"].includes(user.role);
 
@@ -48,7 +49,7 @@ export default function Dashboard() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Welcome back, {user?.name}. Here is your overview.
+          Welcome back, {displayName}. Here is your overview.
         </p>
       </div>
 
@@ -149,7 +150,8 @@ const FUNNEL_LABELS: Record<string, string> = {
 
 function SalesFunnelWidget() {
   const { data: stats, isLoading } = useGetLeadFunnelStats();
-  const total = stats?.reduce((s, r) => s + r.count, 0) ?? 0;
+  const rows = Array.isArray(stats) ? stats : [];
+  const total = rows.reduce((s, r) => s + r.count, 0);
 
   return (
     <Card>
@@ -171,7 +173,7 @@ function SalesFunnelWidget() {
         ) : (
           <>
             <div className="flex gap-1 h-8 rounded overflow-hidden mb-3">
-              {(stats ?? []).map((row) => {
+              {rows.map((row) => {
                 if (row.count === 0) return null;
                 const pct = Math.max((row.count / total) * 100, 2);
                 return (
@@ -185,7 +187,7 @@ function SalesFunnelWidget() {
               })}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {(stats ?? []).map((row) => (
+              {rows.map((row) => (
                 <div key={row.status} className="flex items-center gap-1.5 text-xs">
                   <div className={`w-2.5 h-2.5 rounded-sm ${FUNNEL_COLORS[row.status] ?? "bg-gray-400"}`} />
                   <span className="text-muted-foreground">{FUNNEL_LABELS[row.status] ?? row.status}</span>

@@ -364,8 +364,12 @@ function StockDialog({
       notes: form.notes || undefined,
       referenceNumber: form.referenceNumber || undefined,
       referenceType: "manual",
-      ...(type === "in" ? { poNumber: form.poNumber || undefined, supplierBillNumber: form.supplierBillNumber || undefined } : {}),
-      ...(type === "out" ? { dcNumber: form.dcNumber || undefined } : {}),
+      ...(type === "in"
+        ? {
+            poNumber: form.poNumber || undefined,
+            supplierBillNumber: form.supplierBillNumber || undefined,
+          }
+        : {}),
     } as CreateStockTransactionBody;
     onSave(payload);
   };
@@ -411,7 +415,7 @@ function StockDialog({
             />
           </div>
 
-          {type === "in" && (
+          {type === "in" ? (
             <>
               <div className="space-y-1">
                 <Label>PO Number *</Label>
@@ -424,39 +428,39 @@ function StockDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Supplier Bill Number *</Label>
+                <Label>Supplier Bill / Invoice Number *</Label>
                 <Input
                   value={form.supplierBillNumber}
                   onChange={(e) => setForm({ ...form, supplierBillNumber: e.target.value })}
-                  placeholder="INV/2025/00123"
+                  placeholder="SUPP-INV-001"
                   required
                   data-testid="input-stock-supplier-bill"
                 />
               </div>
             </>
-          )}
-
-          {type === "out" && (
+          ) : (
             <div className="space-y-1">
-              <Label>DC / Delivery Challan Number *</Label>
+              <Label>Reference Document Number *</Label>
               <Input
-                value={form.dcNumber}
-                onChange={(e) => setForm({ ...form, dcNumber: e.target.value })}
-                placeholder="DC-2025-001"
+                value={form.referenceNumber}
+                onChange={(e) => setForm({ ...form, referenceNumber: e.target.value })}
+                placeholder="PO / DC / Invoice number"
                 required
-                data-testid="input-stock-dc-number"
+                data-testid="input-stock-out-reference"
               />
             </div>
           )}
 
-          <div className="space-y-1">
-            <Label>Reference # (optional)</Label>
-            <Input
-              value={form.referenceNumber}
-              onChange={(e) => setForm({ ...form, referenceNumber: e.target.value })}
-              placeholder="WO-012, MR-003..."
-            />
-          </div>
+          {type === "in" && (
+            <div className="space-y-1">
+              <Label>Reference # (optional)</Label>
+              <Input
+                value={form.referenceNumber}
+                onChange={(e) => setForm({ ...form, referenceNumber: e.target.value })}
+                placeholder="WO-012, MR-003..."
+              />
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Notes</Label>
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

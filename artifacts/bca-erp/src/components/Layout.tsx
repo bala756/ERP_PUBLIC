@@ -134,6 +134,8 @@ export function AppSidebar() {
   const pendingCount = pendingPOs.length;
 
   if (!user) return null;
+  const displayName = user.name?.trim() || user.email || "User";
+  const initials = displayName.substring(0, 2).toUpperCase();
 
   return (
     <Sidebar>
@@ -185,10 +187,10 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 mb-4">
           <Avatar>
-            <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">{user.name}</span>
+            <span className="text-sm font-medium">{displayName}</span>
             <Badge variant="secondary" className="w-fit text-xs px-1 py-0">{user.role}</Badge>
           </div>
         </div>

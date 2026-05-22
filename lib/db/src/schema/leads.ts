@@ -40,6 +40,7 @@ export const leadsTable = pgTable("leads", {
   phone: text("phone"),
   email: text("email"),
   gstNumber: text("gst_number"),
+  panNumber: text("pan_number"),
   billingAddress: text("billing_address"),
   deliveryAddress: text("delivery_address"),
   state: text("state"),

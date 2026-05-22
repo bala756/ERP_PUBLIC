@@ -148,6 +148,7 @@ export default function Proposals() {
   const wonMutation = useMarkProposalWon();
 
   const canWrite = user && ["sales", "manager", "director", "admin"].includes(user.role);
+  const canOverrideWonProposal = !!user && ["admin", "director"].includes(user.role);
   const canApproveDiscount = user && ["manager", "director", "admin", "cfo"].includes(user.role);
 
   const handleStatusChange = (proposal: Proposal, status: string) => {
@@ -344,9 +345,34 @@ export default function Proposals() {
                     {formatINR(proposal.total)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[proposal.status] ?? "secondary"}>
-                      {STATUS_LABELS[proposal.status] ?? proposal.status}
-                    </Badge>
+                    {canWrite && (proposal.status !== "won" || canOverrideWonProposal) ? (
+                      <Select
+                        value={proposal.status}
+                        onValueChange={(status) => {
+                          if (status !== proposal.status) {
+                            handleStatusChange(proposal, status);
+                          }
+                        }}
+                        disabled={updateMutation.isPending || wonMutation.isPending}
+                      >
+                        <SelectTrigger className="h-8 w-32 border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                          <Badge variant={STATUS_VARIANT[proposal.status] ?? "secondary"}>
+                            {STATUS_LABELS[proposal.status] ?? proposal.status}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PROPOSAL_STATUSES.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {STATUS_LABELS[status]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge variant={STATUS_VARIANT[proposal.status] ?? "secondary"}>
+                        {STATUS_LABELS[proposal.status] ?? proposal.status}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {proposal.validUntil
@@ -360,6 +386,7 @@ export default function Proposals() {
                     <ProposalActions
                       proposal={proposal}
                       canWrite={!!canWrite}
+                      canOverrideWonProposal={canOverrideWonProposal}
                       onEdit={() => setEditProposal(proposal)}
                       onDelete={() => handleDelete(proposal)}
                       onStatusChange={(s) => handleStatusChange(proposal, s)}
@@ -400,12 +427,14 @@ export default function Proposals() {
 function ProposalActions({
   proposal,
   canWrite,
+  canOverrideWonProposal,
   onEdit,
   onDelete,
   onStatusChange,
 }: {
   proposal: Proposal;
   canWrite: boolean;
+  canOverrideWonProposal: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onStatusChange: (status: string) => void;
@@ -435,10 +464,10 @@ function ProposalActions({
             View / Print
           </a>
         </DropdownMenuItem>
-        {canWrite && (
+        {canWrite && (proposal.status !== "won" || canOverrideWonProposal) && (
           <DropdownMenuItem onClick={onEdit}>
             <Edit className="h-4 w-4 mr-2" />
-            Edit
+            {proposal.status === "won" ? "Admin Edit" : "Edit"}
           </DropdownMenuItem>
         )}
         {proposal.status !== "won" && canWrite && (
@@ -509,6 +538,18 @@ function LineItemsEditor({
   };
 
   const handlePick = (p: PickedProduct) => {
+    const existingIndex = value.findIndex((item) => item.productId === p.productId);
+    if (existingIndex >= 0) {
+      const rows = [...value];
+      rows[existingIndex] = {
+        ...rows[existingIndex],
+        qty: rows[existingIndex].qty + 1,
+      };
+      onChange(rows);
+      setPickerOpen(false);
+      return;
+    }
+
     onChange([
       ...value,
       {
@@ -523,6 +564,7 @@ function LineItemsEditor({
         gstRate: p.gstRate,
       },
     ]);
+    setPickerOpen(false);
   };
 
   const subtotal = value.reduce((s, li) => s + li.qty * li.unitPrice, 0);
@@ -647,8 +689,10 @@ function TotalsPreview({
 }) {
   const subtotal = lineItems.reduce((s, li) => s + li.qty * li.unitPrice, 0);
   const discountAmount = (subtotal * discountPercent) / 100;
-  const packingChargesAmount = (subtotal * packingChargesPercent) / 100;
-  const taxable = subtotal - discountAmount + packingChargesAmount;
+  const discountedSubtotal = subtotal - discountAmount;
+  const packingChargesAmount =
+    (discountedSubtotal * packingChargesPercent) / 100;
+  const taxable = discountedSubtotal + packingChargesAmount;
   const gstAmount = (taxable * gstRate) / 100;
   const total = taxable + gstAmount;
 

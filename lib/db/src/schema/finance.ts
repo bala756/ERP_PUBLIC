@@ -7,6 +7,7 @@ import {
   numeric,
   varchar,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { usersTable } from "./users";
@@ -70,10 +71,13 @@ export const supplierBillsTable = pgTable("supplier_bills", {
   supplierName: varchar("supplier_name", { length: 255 }).notNull(),
   supplierGstin: varchar("supplier_gstin", { length: 20 }),
   purchaseOrderId: integer("purchase_order_id").references(() => purchaseOrdersTable.id, { onDelete: "set null" }),
+  referencePoNumber: varchar("reference_po_number", { length: 100 }),
   billDate: varchar("bill_date", { length: 20 }).notNull(),
   dueDate: varchar("due_date", { length: 20 }),
   transactionType: varchar("transaction_type", { length: 20 }).notNull().default("intrastate"),
+  itemDetails: jsonb("item_details").notNull().default([]),
   subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull().default("0"),
+  gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull().default("0"),
   cgstAmount: numeric("cgst_amount", { precision: 14, scale: 2 }).notNull().default("0"),
   sgstAmount: numeric("sgst_amount", { precision: 14, scale: 2 }).notNull().default("0"),
   igstAmount: numeric("igst_amount", { precision: 14, scale: 2 }).notNull().default("0"),
@@ -102,8 +106,11 @@ export const expensesTable = pgTable("expenses", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  workOrderId: integer("work_order_id").references(() => workOrdersTable.id, { onDelete: "set null" }),
   category: varchar("category", { length: 100 }).notNull().default("general"),
   expenseDate: varchar("expense_date", { length: 20 }).notNull(),
+  gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  gstAmount: numeric("gst_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   approvedById: integer("approved_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   approvedAt: timestamp("approved_at"),
@@ -153,6 +160,10 @@ export const supplierBillRelations = relations(supplierBillsTable, ({ one }) => 
 }));
 
 export const expenseRelations = relations(expensesTable, ({ one }) => ({
+  workOrder: one(workOrdersTable, {
+    fields: [expensesTable.workOrderId],
+    references: [workOrdersTable.id],
+  }),
   createdBy: one(usersTable, {
     fields: [expensesTable.createdById],
     references: [usersTable.id],

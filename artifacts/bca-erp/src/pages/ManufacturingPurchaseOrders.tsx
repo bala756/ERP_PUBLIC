@@ -9,11 +9,13 @@ import {
   useGetPurchaseRequests,
   useGetPurchaseRequest,
   useCreatePurchaseOrder,
+  useGetInventoryItems,
   getGetPurchaseOrdersQueryKey,
   getGetPurchaseRequestsQueryKey,
   getGetPurchaseRequestQueryKey,
   type PurchaseOrder,
   type PurchaseRequestItem,
+  type InventoryItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -49,10 +51,10 @@ const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destr
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   pendingApproval: "Pending Approval",
-  pendingDirectorApproval: "Pending Director",
+  pendingDirectorApproval: "Pending Approval",
   approved: "Approved",
   received: "Received",
-  cancelled: "Cancelled",
+  cancelled: "Rejected",
 };
 
 const APPROVE_ROLES = ["manager", "director", "admin", "cfo"];
@@ -423,6 +425,7 @@ type LineDraft = {
   unit: string;
   qty: number;
   unitPrice: number;
+  stockBalance: number;
   branch: "raw" | "manufactured" | "imported";
 };
 
@@ -436,6 +439,7 @@ function CreatePoFromPrDialog({
   onCreated: () => void;
 }) {
   const { toast } = useToast();
+  const { data: inventoryItems = [] } = useGetInventoryItems();
   const [selectedPrId, setSelectedPrId] = useState<number | null>(null);
   const [supplierName, setSupplierName] = useState("");
   const [supplierContact, setSupplierContact] = useState("");
@@ -488,6 +492,12 @@ function CreatePoFromPrDialog({
   // raw-material PO and are excluded.
   React.useEffect(() => {
     if (!prDetail) return;
+    const masterByProductId = new Map(
+      (inventoryItems as InventoryItem[]).map((item) => [
+        item.id,
+        item,
+      ]),
+    );
     const seeded: LineDraft[] = prDetail.items
       .filter(
         (it: PurchaseRequestItem) =>
@@ -502,11 +512,17 @@ function CreatePoFromPrDialog({
         description: it.description,
         unit: it.unit ?? "nos",
         qty: it.shortfallQty,
-        unitPrice: it.estimatedUnitCost ?? 0,
+        unitPrice:
+          it.productId
+            ? ((masterByProductId.get(it.productId)?.defaultPurchasePrice ?? 0) || it.estimatedUnitCost || 0)
+            : (it.estimatedUnitCost ?? 0),
+        stockBalance: it.productId
+          ? (masterByProductId.get(it.productId)?.stockBalance ?? it.onHandQty ?? 0)
+          : (it.onHandQty ?? 0),
         branch: it.branch as LineDraft["branch"],
       }));
     setLines(seeded);
-  }, [prDetail]);
+  }, [prDetail, inventoryItems]);
 
   const createPO = useCreatePurchaseOrder({
     mutation: {
@@ -678,6 +694,7 @@ function CreatePoFromPrDialog({
                           <TableHead className="w-10"></TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead className="w-24">Unit</TableHead>
+                          <TableHead className="w-28 text-right">In Stock</TableHead>
                           <TableHead className="w-28 text-right">Qty</TableHead>
                           <TableHead className="w-32 text-right">Unit Price</TableHead>
                           <TableHead className="w-32 text-right">Total</TableHead>
@@ -709,6 +726,9 @@ function CreatePoFromPrDialog({
                               )}
                             </TableCell>
                             <TableCell className="text-xs">{l.unit}</TableCell>
+                            <TableCell className="text-right text-sm tabular-nums">
+                              {l.stockBalance}
+                            </TableCell>
                             <TableCell className="text-right">
                               <Input
                                 type="number"

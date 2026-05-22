@@ -3,11 +3,18 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 
 const app: Express = express();
+
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 app.use(
   pinoHttp({
@@ -69,5 +76,24 @@ app.use(
 );
 
 app.use("/api", router);
+
+if (process.env.NODE_ENV === "production") {
+  const distDir = path.dirname(fileURLToPath(import.meta.url));
+  const frontendDir = path.resolve(distDir, "../../bca-erp/dist/public");
+  const indexHtml = path.join(frontendDir, "index.html");
+
+  if (existsSync(indexHtml)) {
+    app.use(express.static(frontendDir));
+    app.use((req, res, next) => {
+      if (req.method !== "GET" || req.path.startsWith("/api")) {
+        next();
+        return;
+      }
+      res.sendFile(indexHtml);
+    });
+  } else {
+    logger.warn({ frontendDir }, "Frontend build directory not found; serving API only");
+  }
+}
 
 export default app;

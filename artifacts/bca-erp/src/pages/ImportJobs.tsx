@@ -49,11 +49,13 @@ export type ImportJobRow = {
   vendorCountry: string | null;
   currency: string;
   exchangeRate: string;
+  purchaseRequestId?: number | null;
   status: string;
   eta: string | null;
   etd: string | null;
   arrivalDate: string | null;
   containerNumber: string | null;
+  containerCbm: string;
   supplierInvoiceAmount: string;
   itemCount: number;
   totalLandedCostInr: number;
@@ -304,14 +306,14 @@ function CreateImportJobDialog({
   isSaving: boolean;
 }) {
   const [title, setTitle] = useState("");
-  const [vendorName, setVendorName] = useState("");
+  const [vendorName, setVendorName] = useState("Import Vendor");
   const [vendorCountry, setVendorCountry] = useState("China");
   const [currency, setCurrency] = useState("USD");
-  const [exchangeRate, setExchangeRate] = useState("83");
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [supplierInvoiceDate, setSupplierInvoiceDate] = useState("");
   const [supplierInvoiceAmount, setSupplierInvoiceAmount] = useState("0");
   const [containerNumber, setContainerNumber] = useState("");
+  const [containerCbm, setContainerCbm] = useState("65");
   const [blNumber, setBlNumber] = useState("");
   const [vesselName, setVesselName] = useState("");
   const [etd, setEtd] = useState("");
@@ -319,14 +321,14 @@ function CreateImportJobDialog({
 
   const reset = () => {
     setTitle("");
-    setVendorName("");
+    setVendorName("Import Vendor");
     setVendorCountry("China");
     setCurrency("USD");
-    setExchangeRate("83");
     setSupplierInvoiceNumber("");
     setSupplierInvoiceDate("");
     setSupplierInvoiceAmount("0");
     setContainerNumber("");
+    setContainerCbm("65");
     setBlNumber("");
     setVesselName("");
     setEtd("");
@@ -343,20 +345,20 @@ function CreateImportJobDialog({
         }
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>New Import Job</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <Label>Title *</Label>
+            <Label>Import Job Name *</Label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Slot Machine Cabinets — Shenzhen Q1"
+              placeholder="e.g. May China shipment"
             />
           </div>
-          <div>
+          <div className="hidden">
             <Label>Foreign Vendor *</Label>
             <Input
               value={vendorName}
@@ -365,13 +367,13 @@ function CreateImportJobDialog({
             />
           </div>
           <div>
-            <Label>Country</Label>
+            <Label>Country of Origin *</Label>
             <Input
               value={vendorCountry}
               onChange={(e) => setVendorCountry(e.target.value)}
             />
           </div>
-          <div>
+          <div className="hidden">
             <Label>Currency</Label>
             <Select value={currency} onValueChange={setCurrency}>
               <SelectTrigger>
@@ -387,23 +389,14 @@ function CreateImportJobDialog({
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Exchange Rate (to INR) *</Label>
-            <Input
-              type="number"
-              step="0.0001"
-              value={exchangeRate}
-              onChange={(e) => setExchangeRate(e.target.value)}
-            />
-          </div>
-          <div>
+          <div className="hidden">
             <Label>Supplier Invoice #</Label>
             <Input
               value={supplierInvoiceNumber}
               onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
             />
           </div>
-          <div>
+          <div className="hidden">
             <Label>Supplier Invoice Date</Label>
             <Input
               type="date"
@@ -411,7 +404,7 @@ function CreateImportJobDialog({
               onChange={(e) => setSupplierInvoiceDate(e.target.value)}
             />
           </div>
-          <div>
+          <div className="hidden">
             <Label>Supplier Invoice Amount</Label>
             <Input
               type="number"
@@ -420,7 +413,7 @@ function CreateImportJobDialog({
               onChange={(e) => setSupplierInvoiceAmount(e.target.value)}
             />
           </div>
-          <div>
+          <div className="hidden">
             <Label>Container Number</Label>
             <Input
               value={containerNumber}
@@ -428,13 +421,22 @@ function CreateImportJobDialog({
             />
           </div>
           <div>
-            <Label>BL Number</Label>
+            <Label>BL Number *</Label>
             <Input
               value={blNumber}
               onChange={(e) => setBlNumber(e.target.value)}
             />
           </div>
           <div>
+            <Label>CBM *</Label>
+            <Input
+              type="number"
+              step="0.0001"
+              value={containerCbm}
+              onChange={(e) => setContainerCbm(e.target.value)}
+            />
+          </div>
+          <div className="hidden">
             <Label>Vessel Name</Label>
             <Input
               value={vesselName}
@@ -442,7 +444,7 @@ function CreateImportJobDialog({
             />
           </div>
           <div>
-            <Label>ETD</Label>
+            <Label>ETD *</Label>
             <Input
               type="date"
               value={etd}
@@ -450,7 +452,7 @@ function CreateImportJobDialog({
             />
           </div>
           <div>
-            <Label>ETA</Label>
+            <Label>ETA *</Label>
             <Input
               type="date"
               value={eta}
@@ -463,17 +465,26 @@ function CreateImportJobDialog({
             Cancel
           </Button>
           <Button
-            disabled={isSaving || !title.trim() || !vendorName.trim()}
+            disabled={
+              isSaving ||
+              !title.trim() ||
+              !vendorCountry.trim() ||
+              !blNumber.trim() ||
+              !etd ||
+              !eta ||
+              !containerCbm
+            }
             onClick={() =>
               onSubmit({
-                title,
+                title: title.trim(),
                 vendorName,
                 vendorCountry,
                 currency,
-                exchangeRate: parseFloat(exchangeRate) || 0,
+                exchangeRate: 83,
                 supplierInvoiceNumber: supplierInvoiceNumber || null,
                 supplierInvoiceDate: supplierInvoiceDate || null,
                 supplierInvoiceAmount: parseFloat(supplierInvoiceAmount) || 0,
+                containerCbm: parseFloat(containerCbm) || 0,
                 containerNumber: containerNumber || null,
                 blNumber: blNumber || null,
                 vesselName: vesselName || null,

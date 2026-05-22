@@ -12,7 +12,6 @@ import {
   useReceivePurchaseOrder,
   useAddSubcontract,
   useUpsertDelivery,
-  useGenerateInvoice,
   useMarkFinishedGoods,
   useReleaseWorkOrder,
   useGenerateInvoiceFromStores,
@@ -290,7 +289,6 @@ export default function WorkOrderDetail() {
   const receivePO = useReceivePurchaseOrder({ mutation: { onSuccess: () => { invalidate(); toast({ title: "Goods received — Stock IN recorded" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
   const addSubcontract = useAddSubcontract({ mutation: { onSuccess: () => { invalidate(); setSubcontractForItem(null); setSubForm({ vendorName: "", vendorContact: "", cost: "", description: "" }); toast({ title: "Subcontract recorded" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
   const upsertDelivery = useUpsertDelivery({ mutation: { onSuccess: () => { invalidate(); setShowDelivery(false); toast({ title: "Delivery updated" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
-  const generateInv = useGenerateInvoice({ mutation: { onSuccess: (d) => { invalidate(); toast({ title: `Invoice generated: ${d.invoiceNumber}` }); }, onError: () => toast({ title: "Failed to generate invoice", variant: "destructive" }) } });
   const markFinished = useMarkFinishedGoods({ mutation: { onSuccess: () => { invalidate(); toast({ title: "Finished goods received" }); }, onError: () => toast({ title: "Failed", variant: "destructive" }) } });
   const releaseWO = useReleaseWorkOrder({
     mutation: {
@@ -659,16 +657,6 @@ export default function WorkOrderDetail() {
       <Card className="border-dashed">
         <CardContent className="pt-4 pb-4 flex flex-wrap items-center gap-2">
           <Button
-            variant="default"
-            size="sm"
-            disabled={releaseWO.isPending || wo.status === "delivered" || wo.status === "cancelled"}
-            onClick={() => woId && releaseWO.mutate({ id: woId })}
-            data-testid="button-release-wo"
-          >
-            <ClipboardList className="h-4 w-4 mr-1" />
-            Release → Create Purchase Request
-          </Button>
-          <Button
             variant="outline"
             size="sm"
             disabled={generateInvFromStores.isPending}
@@ -989,18 +977,6 @@ export default function WorkOrderDetail() {
                     </>
                   )}
 
-                  {(item.currentStep === "productionRequest" || (item.workflowType === "imported" && item.currentStep === "pending")) && canCreatePO && (
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground mb-2">
-                        {item.workflowType === "manufacturing" ? "Step 2: Create Raw Material PO" : "Step 1: Create Purchase Order"}
-                      </p>
-                      <Button size="sm" variant="outline" onClick={() => { setCreatePOForItem(item.id); setPOForm(defaultPOForm()); }}>
-                        <Plus className="h-3 w-3 mr-1" />
-                        Create PO
-                      </Button>
-                    </div>
-                  )}
-
                   {itemPOs.length > 0 && (
                     <div className="space-y-3">
                       <p className="text-sm font-medium">Purchase Orders</p>
@@ -1172,9 +1148,9 @@ export default function WorkOrderDetail() {
                 </Button>
               )}
               {!delivery.invoiceGenerated && canInvoice && (
-                <Button size="sm" onClick={() => generateInv.mutate({ id: woId })} disabled={generateInv.isPending}>
+                <Button size="sm" onClick={() => generateInvFromStores.mutate({ id: woId })} disabled={generateInvFromStores.isPending}>
                   <FileText className="h-3 w-3 mr-1" />
-                  Generate GST Invoice
+                  Generate Invoice from Stores
                 </Button>
               )}
             </div>
@@ -1195,11 +1171,11 @@ export default function WorkOrderDetail() {
       {canInvoice && !allInvoiced && (
         <div className="flex justify-end">
           <Button
-            onClick={() => generateInv.mutate({ id: woId })}
-            disabled={generateInv.isPending}
+            onClick={() => generateInvFromStores.mutate({ id: woId })}
+            disabled={generateInvFromStores.isPending}
           >
             <FileText className="h-4 w-4 mr-2" />
-            {generateInv.isPending ? "Generating..." : "Generate GST Invoice"}
+            {generateInvFromStores.isPending ? "Generating..." : "Generate Invoice from Stores"}
           </Button>
         </div>
       )}

@@ -5,8 +5,11 @@ import {
   useApproveExpense,
   useRejectExpense,
   useDeleteExpense,
+  useGetWorkOrders,
   type Expense,
+  type WorkOrder,
   getGetExpensesQueryKey,
+  getGetWorkOrdersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -59,9 +62,13 @@ function statusBadge(status: string) {
 function CreateExpenseModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { data: workOrders = [] } = useGetWorkOrders(undefined, {
+    query: { enabled: open, queryKey: getGetWorkOrdersQueryKey() },
+  });
   const [form, setForm] = useState({
     name: "", amount: "", category: "general",
     expenseDate: new Date().toISOString().slice(0, 10), notes: "", receiptRef: "",
+    workOrderId: "", gstRate: "0",
   });
 
   const mutation = useCreateExpense({
@@ -70,7 +77,7 @@ function CreateExpenseModal({ open, onClose }: { open: boolean; onClose: () => v
         void qc.invalidateQueries({ queryKey: getGetExpensesQueryKey() });
         toast({ title: "Expense added" });
         onClose();
-        setForm({ name: "", amount: "", category: "general", expenseDate: new Date().toISOString().slice(0, 10), notes: "", receiptRef: "" });
+        setForm({ name: "", amount: "", category: "general", expenseDate: new Date().toISOString().slice(0, 10), notes: "", receiptRef: "", workOrderId: "", gstRate: "0" });
       },
       onError: () => toast({ title: "Failed to add expense", variant: "destructive" }),
     },
@@ -82,8 +89,10 @@ function CreateExpenseModal({ open, onClose }: { open: boolean; onClose: () => v
       data: {
         name: form.name,
         amount: parseFloat(form.amount),
+        workOrderId: form.workOrderId ? Number(form.workOrderId) : undefined,
         category: form.category,
         expenseDate: form.expenseDate,
+        gstRate: parseFloat(form.gstRate) || 0,
         notes: form.notes || undefined,
         receiptRef: form.receiptRef || undefined,
       },
@@ -121,6 +130,24 @@ function CreateExpenseModal({ open, onClose }: { open: boolean; onClose: () => v
             </Select>
           </div>
           <div className="space-y-1">
+            <Label>Work Order Number</Label>
+            <Select value={form.workOrderId || "none"} onValueChange={(v) => setForm({ ...form, workOrderId: v === "none" ? "" : v })}>
+              <SelectTrigger><SelectValue placeholder="Select Work Order" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {(workOrders as WorkOrder[]).map((wo) => (
+                  <SelectItem key={wo.id} value={String(wo.id)}>
+                    {wo.woNumber} - {wo.customerName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>GST (%)</Label>
+            <Input type="number" min="0" max="100" step="0.01" value={form.gstRate} onChange={(e) => setForm({ ...form, gstRate: e.target.value })} />
+          </div>
+          <div className="space-y-1">
             <Label>Receipt Reference</Label>
             <Input value={form.receiptRef} onChange={(e) => setForm({ ...form, receiptRef: e.target.value })} placeholder="Receipt / bill number" />
           </div>
@@ -147,6 +174,11 @@ export default function ExpensesPage() {
 
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [monthFilter, setMonthFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+  const [search, setSearch] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: expenses = [], isLoading } = useGetExpenses(statusFilter ? { status: statusFilter } : {});
@@ -172,7 +204,18 @@ export default function ExpensesPage() {
     },
   });
 
-  const filtered = (expenses as Expense[]).filter((e) => !categoryFilter || e.category === categoryFilter);
+  const filtered = (expenses as Expense[]).filter((e) => {
+    if (categoryFilter && e.category !== categoryFilter) return false;
+    if (monthFilter !== "all" && e.expenseDate.slice(5, 7) !== monthFilter) return false;
+    if (yearFilter && !e.expenseDate.startsWith(yearFilter)) return false;
+    const amount = parseFloat(e.amount ?? "0");
+    if (minAmount && amount < Number(minAmount)) return false;
+    if (maxAmount && amount > Number(maxAmount)) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [e.name, e.category, e.receiptRef, e.notes, e.status, e.workOrderNumber, e.woNumber]
+      .some((value) => String(value ?? "").toLowerCase().includes(q));
+  });
 
   const totalApproved = filtered.filter((e) => e.status === "approved").reduce((s, e) => s + parseFloat(e.amount ?? "0"), 0);
   const totalPending = filtered.filter((e) => e.status === "pending").reduce((s, e) => s + parseFloat(e.amount ?? "0"), 0);
@@ -206,6 +249,23 @@ export default function ExpensesPage() {
 
       <div className="flex gap-3 flex-wrap items-end">
         <div className="space-y-1">
+          <Label>Month</Label>
+          <Select value={monthFilter} onValueChange={setMonthFilter}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All months</SelectItem>
+              {Array.from({ length: 12 }).map((_, i) => {
+                const value = String(i + 1).padStart(2, "0");
+                return <SelectItem key={value} value={value}>{new Date(2026, i, 1).toLocaleString("en-IN", { month: "long" })}</SelectItem>;
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label>Year</Label>
+          <Input className="w-28" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} placeholder="2026" />
+        </div>
+        <div className="space-y-1">
           <Label>Status</Label>
           <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
             <SelectTrigger className="w-32"><SelectValue placeholder="All" /></SelectTrigger>
@@ -229,6 +289,18 @@ export default function ExpensesPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1">
+          <Label>Search</Label>
+          <Input className="w-64" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="WO, receipt, GST, status" />
+        </div>
+        <div className="space-y-1">
+          <Label>Min Amount</Label>
+          <Input className="w-32" type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="0" />
+        </div>
+        <div className="space-y-1">
+          <Label>Max Amount</Label>
+          <Input className="w-32" type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="0" />
+        </div>
       </div>
 
       {isLoading ? (
@@ -240,8 +312,10 @@ export default function ExpensesPage() {
               <TableRow>
                 <TableHead>Description</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Work Order</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Receipt</TableHead>
+                <TableHead className="text-right">GST</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -249,7 +323,7 @@ export default function ExpensesPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-10">No expenses found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-10">No expenses found</TableCell></TableRow>
               ) : (
                 filtered.map((expense) => (
                   <TableRow key={expense.id}>
@@ -260,8 +334,13 @@ export default function ExpensesPage() {
                     <TableCell>
                       <Badge variant="outline" className="text-xs capitalize">{expense.category}</Badge>
                     </TableCell>
+                    <TableCell className="font-mono text-xs">{expense.workOrderNumber ?? expense.woNumber ?? "-"}</TableCell>
                     <TableCell>{fmtDate(expense.expenseDate)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{expense.receiptRef ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="font-medium">Rs. {fmt(expense.gstAmount)}</div>
+                      <div className="text-xs text-muted-foreground">{fmt(expense.gstRate)}%</div>
+                    </TableCell>
                     <TableCell className="text-right font-semibold">₹{fmt(expense.amount)}</TableCell>
                     <TableCell>{statusBadge(expense.status)}</TableCell>
                     <TableCell className="text-right">

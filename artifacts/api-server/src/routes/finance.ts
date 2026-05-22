@@ -8,6 +8,7 @@ import {
   supplierBillsTable,
   supplierBillPaymentsTable,
   expensesTable,
+  workOrdersTable,
 } from "@workspace/db";
 import { eq, desc, and, like, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -317,15 +318,17 @@ const createBillSchema = z.object({
   supplierName: z.string().min(1),
   supplierGstin: z.string().optional(),
   purchaseOrderId: z.number().int().optional(),
+  referencePoNumber: z.string().optional(),
   billDate: z.string().min(1),
   dueDate: z.string().optional(),
   transactionType: z.enum(["intrastate", "interstate"]).default("intrastate"),
-  subtotal: z.number().min(0),
-  cgstAmount: z.number().min(0).default(0),
-  sgstAmount: z.number().min(0).default(0),
-  igstAmount: z.number().min(0).default(0),
-  gstAmount: z.number().min(0),
-  total: z.number().min(0),
+  itemDetails: z.array(z.object({
+    description: z.string().min(1),
+    qty: z.number().positive(),
+    unitPrice: z.number().min(0),
+    amount: z.number().min(0),
+  })).min(1),
+  gstRate: z.number().min(0).max(100).default(0),
   notes: z.string().optional(),
 });
 
@@ -350,14 +353,32 @@ financeRouter.post("/supplier-bills", requireAuth, requireRole(...PURCHASE_ROLES
   const parsed = createBillSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() }); return; }
 
+  const normalizedItems = parsed.data.itemDetails.map((item) => {
+    const amount = item.qty * item.unitPrice;
+    return {
+      description: item.description,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+      amount: Number(amount.toFixed(2)),
+    };
+  });
+  const subtotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+  const gstAmount = subtotal * (parsed.data.gstRate / 100);
+  const cgstAmount = parsed.data.transactionType === "intrastate" ? gstAmount / 2 : 0;
+  const sgstAmount = parsed.data.transactionType === "intrastate" ? gstAmount / 2 : 0;
+  const igstAmount = parsed.data.transactionType === "interstate" ? gstAmount : 0;
+  const total = subtotal + gstAmount;
+
   const [bill] = await db.insert(supplierBillsTable).values({
     ...parsed.data,
-    subtotal: parsed.data.subtotal.toFixed(2),
-    cgstAmount: parsed.data.cgstAmount.toFixed(2),
-    sgstAmount: parsed.data.sgstAmount.toFixed(2),
-    igstAmount: parsed.data.igstAmount.toFixed(2),
-    gstAmount: parsed.data.gstAmount.toFixed(2),
-    total: parsed.data.total.toFixed(2),
+    itemDetails: normalizedItems,
+    subtotal: subtotal.toFixed(2),
+    gstRate: parsed.data.gstRate.toFixed(2),
+    cgstAmount: cgstAmount.toFixed(2),
+    sgstAmount: sgstAmount.toFixed(2),
+    igstAmount: igstAmount.toFixed(2),
+    gstAmount: gstAmount.toFixed(2),
+    total: total.toFixed(2),
     status: "pending",
     paidAmount: "0",
     createdById: req.session.userId,
@@ -468,8 +489,10 @@ financeRouter.get("/supplier-bills/report/ap-ageing", requireAuth, requireRole(.
 const createExpenseSchema = z.object({
   name: z.string().min(1),
   amount: z.number().positive(),
+  workOrderId: z.number().int().positive().optional().nullable(),
   category: z.string().default("general"),
   expenseDate: z.string().min(1),
+  gstRate: z.number().min(0).max(100).default(0),
   notes: z.string().optional(),
   receiptRef: z.string().optional(),
 });
@@ -478,21 +501,37 @@ const EXPENSE_CATEGORIES = ["general", "travel", "meals", "utilities", "office",
 
 financeRouter.get("/expenses", requireAuth, requireRole(...FINANCE_ROLES), async (req, res) => {
   const { status } = req.query as { status?: string };
-  let query = db.select().from(expensesTable).orderBy(desc(expensesTable.expenseDate)).$dynamic();
+  const expenses = expensesTable as typeof expensesTable & {
+    workOrderId: typeof workOrdersTable.id;
+  };
+  let query = db
+    .select({
+      expense: expensesTable,
+      woNumber: workOrdersTable.woNumber,
+    })
+    .from(expensesTable)
+    .leftJoin(workOrdersTable, eq(workOrdersTable.id, expenses.workOrderId))
+    .orderBy(desc(expensesTable.expenseDate))
+    .$dynamic();
   if (status) query = query.where(eq(expensesTable.status, status));
-  res.json(await query);
+  const rows = await query;
+  res.json(rows.map((row) => ({ ...row.expense, workOrderNumber: row.woNumber ?? null, woNumber: row.woNumber ?? null })));
 });
 
 financeRouter.post("/expenses", requireAuth, requireRole(...FINANCE_ROLES), async (req, res) => {
   const parsed = createExpenseSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() }); return; }
+  const gstAmount = parsed.data.amount * (parsed.data.gstRate / 100);
 
   const [expense] = await db.insert(expensesTable).values({
     ...parsed.data,
+    workOrderId: parsed.data.workOrderId ?? null,
     amount: parsed.data.amount.toFixed(2),
+    gstRate: parsed.data.gstRate.toFixed(2),
+    gstAmount: gstAmount.toFixed(2),
     status: "pending",
     createdById: req.session.userId,
-  }).returning();
+  } as typeof expensesTable.$inferInsert & { workOrderId?: number | null; gstRate?: string; gstAmount?: string }).returning();
 
   res.status(201).json(expense);
 });

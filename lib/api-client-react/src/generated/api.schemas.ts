@@ -111,6 +111,7 @@ export interface Lead {
   phone?: string | null;
   email?: string | null;
   gstNumber?: string | null;
+  panNumber?: string | null;
   billingAddress?: string | null;
   deliveryAddress?: string | null;
   source: LeadSource;
@@ -142,6 +143,7 @@ export interface CreateLeadBody {
   phone?: string;
   email?: string;
   gstNumber?: string;
+  panNumber?: string;
   billingAddress?: string;
   deliveryAddress?: string;
   source?: CreateLeadBodySource;
@@ -182,6 +184,7 @@ export interface UpdateLeadBody {
   phone?: string;
   email?: string;
   gstNumber?: string;
+  panNumber?: string;
   billingAddress?: string;
   deliveryAddress?: string;
   source?: UpdateLeadBodySource;
@@ -1421,10 +1424,14 @@ export interface SupplierBill {
   supplierGstin?: string | null;
   /** @nullable */
   purchaseOrderId?: number | null;
+  /** @nullable */
+  referencePoNumber?: string | null;
   billDate: string;
   /** @nullable */
   dueDate?: string | null;
+  itemDetails: SupplierBillItem[];
   subtotal: string;
+  gstRate: string;
   gstAmount: string;
   total: string;
   paidAmount: string;
@@ -1450,24 +1457,36 @@ export interface CreateSupplierBillBody {
   supplierName: string;
   supplierGstin?: string;
   purchaseOrderId?: number;
+  referencePoNumber?: string;
   billDate: string;
   dueDate?: string;
   transactionType?: CreateSupplierBillBodyTransactionType;
-  subtotal: number;
-  gstAmount: number;
-  cgstAmount?: number;
-  sgstAmount?: number;
-  igstAmount?: number;
-  total: number;
+  itemDetails: SupplierBillItem[];
+  gstRate?: number;
   notes?: string;
+}
+
+export interface SupplierBillItem {
+  description: string;
+  qty: number;
+  unitPrice: number;
+  amount: number;
 }
 
 export interface Expense {
   id: number;
   name: string;
   amount: string;
+  /** @nullable */
+  workOrderId?: number | null;
+  /** @nullable */
+  workOrderNumber?: string | null;
+  /** @nullable */
+  woNumber?: string | null;
   category: string;
   expenseDate: string;
+  gstRate: string;
+  gstAmount: string;
   status: string;
   /** @nullable */
   approvedById?: number | null;
@@ -1486,8 +1505,10 @@ export interface Expense {
 export interface CreateExpenseBody {
   name: string;
   amount: number;
+  workOrderId?: number | null;
   category: string;
   expenseDate: string;
+  gstRate?: number;
   notes?: string;
   receiptRef?: string;
 }
@@ -1648,6 +1669,11 @@ export interface PurchaseRequest {
   createdAt: string;
   updatedAt: string;
   itemCount: number;
+  itemSummaries: {
+    description: string;
+    qty: number;
+    unit?: string | null;
+  }[];
   /** Total estimated value across all PR lines. Returned as null for raiser-only roles (e.g. sales) who must not see prices. */
   totalEstimatedValue?: number | null;
 }

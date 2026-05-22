@@ -2784,6 +2784,9 @@ components:
         gstNumber:
           type: string
           nullable: true
+        panNumber:
+          type: string
+          nullable: true
         billingAddress:
           type: string
           nullable: true
@@ -2839,6 +2842,8 @@ components:
           type: string
         gstNumber:
           type: string
+        panNumber:
+          type: string
         billingAddress:
           type: string
         deliveryAddress:
@@ -2871,6 +2876,8 @@ components:
         email:
           type: string
         gstNumber:
+          type: string
+        panNumber:
           type: string
         billingAddress:
           type: string
@@ -5049,10 +5056,27 @@ components:
           type: ["string", "null"]
         purchaseOrderId:
           type: ["integer", "null"]
+        referencePoNumber:
+          type: ["string", "null"]
         billDate:
           type: string
         dueDate:
           type: ["string", "null"]
+        itemDetails:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              qty:
+                type: number
+              unitPrice:
+                type: number
+              amount:
+                type: number
+        gstRate:
+          type: string
         subtotal:
           type: string
         gstAmount:
@@ -5086,7 +5110,7 @@ components:
 
     CreateSupplierBillBody:
       type: object
-      required: [billNumber, supplierName, billDate, subtotal, gstAmount, total]
+      required: [billNumber, supplierName, billDate, itemDetails]
       properties:
         billNumber:
           type: string
@@ -5096,6 +5120,8 @@ components:
           type: string
         purchaseOrderId:
           type: integer
+        referencePoNumber:
+          type: string
         billDate:
           type: string
         dueDate:
@@ -5103,17 +5129,20 @@ components:
         transactionType:
           type: string
           enum: [intrastate, interstate]
-        subtotal:
-          type: number
-        gstAmount:
-          type: number
-        cgstAmount:
-          type: number
-        sgstAmount:
-          type: number
-        igstAmount:
-          type: number
-        total:
+        itemDetails:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              qty:
+                type: number
+              unitPrice:
+                type: number
+              amount:
+                type: number
+        gstRate:
           type: number
         notes:
           type: string
@@ -5504,6 +5533,21 @@ components:
           type: string
         itemCount:
           type: integer
+        itemSummaries:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              qty:
+                type: number
+              unit:
+                type: string
+                nullable: true
+            required:
+              - description
+              - qty
         totalEstimatedValue:
           type: number
           nullable: true
@@ -5516,6 +5560,7 @@ components:
         - createdAt
         - updatedAt
         - itemCount
+        - itemSummaries
 
     PurchaseRequestItem:
       type: object

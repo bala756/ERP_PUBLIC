@@ -68,6 +68,23 @@ async function initOrderSequences() {
       await db.execute(sql`SELECT setval('po_seq', ${poMax}, true)`);
       logger.info({ maxSeq: poMax }, "Initialized po_seq to max issued PO number");
     }
+    const prResult = await db.execute<{ max_seq: number }>(
+      sql`SELECT COALESCE(MAX(CAST(split_part(pr_number, '-', 3) AS INTEGER)), 0) AS max_seq FROM purchase_requests`,
+    );
+    const prMax = (prResult.rows[0] as { max_seq: number }).max_seq ?? 0;
+    if (prMax > 0) {
+      await db.execute(sql`SELECT setval('pr_seq', ${prMax}, true)`);
+      logger.info({ maxSeq: prMax }, "Initialized pr_seq to max issued PR number");
+    }
+    const importJobResult = await db.execute<{ max_seq: number }>(
+      sql`SELECT COALESCE(MAX(CAST(split_part(job_number, '-', 3) AS INTEGER)), 0) AS max_seq FROM import_jobs`,
+    );
+    const importJobMax =
+      (importJobResult.rows[0] as { max_seq: number }).max_seq ?? 0;
+    if (importJobMax > 0) {
+      await db.execute(sql`SELECT setval('import_job_seq', ${importJobMax}, true)`);
+      logger.info({ maxSeq: importJobMax }, "Initialized import_job_seq to max issued import job number");
+    }
   } catch (err) {
     logger.error({ err }, "Failed to initialize order sequences");
   }

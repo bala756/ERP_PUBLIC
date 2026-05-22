@@ -404,7 +404,7 @@ stockMovementsRouter.post(
         continue;
       }
       const orderedQty = parseFloat(li.qty);
-      const unitCost = line.unitCost ?? parseFloat(li.unitPrice);
+      const unitCost = parseFloat(li.unitPrice);
       const receivedQty = line.receivedQty;
       const priorReceived = priorReceivedByItem.get(li.productId) ?? 0;
       const cumulativeReceived = priorReceived + receivedQty;

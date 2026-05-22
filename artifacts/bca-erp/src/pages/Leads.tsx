@@ -129,12 +129,13 @@ const STATUS_VARIANT: Record<
   onHold: "outline",
 };
 
-const createLeadSchema = z.object({
+const leadFormSchema = z.object({
   customerName: z.string().min(1, "Customer name required"),
   company: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
   gstNumber: z.string().optional(),
+  panNumber: z.string().optional(),
   billingAddress: z.string().optional(),
   deliveryAddress: z.string().optional(),
   source: z.enum(["indiaMart", "website", "referral", "direct", "other"]),
@@ -144,7 +145,15 @@ const createLeadSchema = z.object({
   assignedToId: z.number().optional(),
 });
 
-type CreateLeadForm = z.infer<typeof createLeadSchema>;
+const createLeadSchema = leadFormSchema.refine(
+  (data) => Boolean(data.gstNumber?.trim() || data.panNumber?.trim()),
+  {
+    message: "Enter either GST number or PAN number",
+    path: ["gstNumber"],
+  },
+);
+
+type CreateLeadForm = z.infer<typeof leadFormSchema>;
 
 export default function Leads() {
   const { user } = useAuth();
@@ -448,6 +457,7 @@ function CreateLeadDialog({
       company: data.company || undefined,
       phone: data.phone || undefined,
       gstNumber: data.gstNumber || undefined,
+      panNumber: data.panNumber || undefined,
       billingAddress: data.billingAddress || undefined,
       deliveryAddress: data.deliveryAddress || undefined,
       productInterest: data.productInterest || undefined,
@@ -589,12 +599,12 @@ function CreateLeadDialog({
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="productInterest"
+                name="gstNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Product Interest</FormLabel>
+                    <FormLabel>GST Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Stage Lighting, Audio System" {...field} />
+                      <Input placeholder="22AAAAA0000A1Z5" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -602,12 +612,30 @@ function CreateLeadDialog({
               />
               <FormField
                 control={form.control}
-                name="gstNumber"
+                name="panNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>GST Number</FormLabel>
+                    <FormLabel>PAN Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="22AAAAA0000A1Z5" {...field} />
+                      <Input placeholder="AAAAA0000A" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Either GST number or PAN number is required.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="productInterest"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Product Interest</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Stage Lighting, Audio System" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -720,6 +748,7 @@ function EditLeadDialog({
       phone: lead.phone ?? "",
       email: lead.email ?? "",
       gstNumber: lead.gstNumber ?? "",
+      panNumber: lead.panNumber ?? "",
       billingAddress: lead.billingAddress ?? "",
       deliveryAddress: lead.deliveryAddress ?? "",
       source: (lead.source as (typeof LEAD_SOURCES)[number]) ?? "other",
@@ -891,6 +920,20 @@ function EditLeadDialog({
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="panNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>PAN Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="AAAAA0000A" {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="productInterest"

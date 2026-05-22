@@ -894,6 +894,7 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
   // If ANY line differs from master, the PO requires Director approval before
   // it can be approved, received, or moved through the normal flow.
   let requiresDirectorApproval = false;
+  const masterMap = new Map<number, number>();
   const productIds = lineItems
     .map((li) => li.productId)
     .filter((id): id is number => typeof id === "number" && id > 0);
@@ -902,9 +903,7 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
       .select({ id: inventoryItemsTable.id, defaultPurchasePrice: inventoryItemsTable.defaultPurchasePrice })
       .from(inventoryItemsTable)
       .where(inArray(inventoryItemsTable.id, productIds));
-    const masterMap = new Map(
-      masterItems.map((m) => [m.id, parseFloat(m.defaultPurchasePrice ?? "0")]),
-    );
+    for (const m of masterItems) masterMap.set(m.id, parseFloat(m.defaultPurchasePrice ?? "0"));
     for (const li of lineItems) {
       if (!li.productId) continue;
       const master = masterMap.get(li.productId);
@@ -937,9 +936,9 @@ ordersRouter.post("/purchase-orders", requireRole(...PO_CREATE_ROLES), async (re
           poAmount: rest.poAmount.toString(),
           requiresCfoApproval,
           requiresDirectorApproval,
-          status: requiresDirectorApproval
-            ? "pendingDirectorApproval"
-            : "pendingApproval",
+          status: requiresDirectorApproval ? "pendingDirectorApproval" : "approved",
+          approvedById: requiresDirectorApproval ? null : userId,
+          approvedAt: requiresDirectorApproval ? null : new Date(),
           createdById: userId,
         })
         .returning();
@@ -1547,6 +1546,12 @@ ordersRouter.post(
   "/work-orders/:id/invoice",
   requireRole(...INVOICE_ROLES),
   async (req, res) => {
+    res.status(400).json({
+      error:
+        "Invoice generation from Work Order is disabled. Complete PR, PO, Stock In, then use Generate Invoice from Stores.",
+    });
+    return;
+
     const id = parseInt(String(req.params.id), 10);
     if (isNaN(id)) {
       res.status(400).json({ error: "Invalid id" });

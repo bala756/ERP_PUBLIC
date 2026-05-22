@@ -43,6 +43,7 @@ export const importJobsTable = pgTable("import_jobs", {
   exchangeRate: numeric("exchange_rate", { precision: 12, scale: 4 })
     .notNull()
     .default("83.0000"),
+  purchaseRequestId: integer("purchase_request_id"),
   purchaseOrderId: integer("purchase_order_id").references(
     () => purchaseOrdersTable.id,
     { onDelete: "set null" },
@@ -53,6 +54,9 @@ export const importJobsTable = pgTable("import_jobs", {
     precision: 14,
     scale: 2,
   })
+    .notNull()
+    .default("0"),
+  containerCbm: numeric("container_cbm", { precision: 14, scale: 4 })
     .notNull()
     .default("0"),
   containerNumber: varchar("container_number", { length: 50 }),
@@ -94,6 +98,9 @@ export const importJobItemsTable = pgTable("import_job_items", {
   })
     .notNull()
     .default("0"),
+  exchangeRate: numeric("exchange_rate", { precision: 12, scale: 4 })
+    .notNull()
+    .default("83.0000"),
   unitCbm: numeric("unit_cbm", { precision: 14, scale: 6 })
     .notNull()
     .default("0"),

@@ -90,6 +90,20 @@ async function getOnHandQty(itemId: number): Promise<number> {
   );
 }
 
+async function findInventoryItemForPrLine(description: string) {
+  const normalized = description.trim().toLowerCase();
+  if (!normalized) return null;
+  const [item] = await db
+    .select()
+    .from(inventoryItemsTable)
+    .where(
+      sql`lower(trim(${inventoryItemsTable.name})) = ${normalized}
+        OR lower(trim(${inventoryItemsTable.itemCode})) = ${normalized}`,
+    )
+    .limit(1);
+  return item ?? null;
+}
+
 function classifyBranch(
   category: string | null | undefined,
   workflowType: string | null | undefined,
@@ -112,6 +126,7 @@ function serializePr(
     createdBy?: { name: string } | null;
     approvedBy?: { name: string } | null;
     itemCount?: number;
+    itemSummaries?: { description: string; qty: number; unit: string | null }[];
     totalEstimatedValue?: number;
   },
   showPrices: boolean = true,
@@ -131,6 +146,7 @@ function serializePr(
     createdAt: pr.createdAt.toISOString(),
     updatedAt: pr.updatedAt.toISOString(),
     itemCount: pr.itemCount ?? 0,
+    itemSummaries: pr.itemSummaries ?? [],
     // Prices are stripped (null) for raiser-only roles. The OpenAPI
     // schema marks this nullable so the wire shape is honest.
     totalEstimatedValue: showPrices ? (pr.totalEstimatedValue ?? 0) : null,
@@ -163,6 +179,39 @@ async function getPrItemTotals(
       totalEstimatedValue: parseFloat(r.totalEstimatedValue),
     });
   }
+  return map;
+}
+
+async function getPrItemSummaries(
+  prIds: number[],
+): Promise<Map<number, { description: string; qty: number; unit: string | null }[]>> {
+  const map = new Map<
+    number,
+    { description: string; qty: number; unit: string | null }[]
+  >();
+  if (prIds.length === 0) return map;
+
+  const rows = await db
+    .select({
+      purchaseRequestId: purchaseRequestItemsTable.purchaseRequestId,
+      description: purchaseRequestItemsTable.description,
+      shortfallQty: purchaseRequestItemsTable.shortfallQty,
+      unit: purchaseRequestItemsTable.unit,
+    })
+    .from(purchaseRequestItemsTable)
+    .where(inArray(purchaseRequestItemsTable.purchaseRequestId, prIds))
+    .orderBy(purchaseRequestItemsTable.id);
+
+  for (const r of rows) {
+    const list = map.get(r.purchaseRequestId) ?? [];
+    list.push({
+      description: r.description,
+      qty: parseFloat(r.shortfallQty),
+      unit: r.unit ?? null,
+    });
+    map.set(r.purchaseRequestId, list);
+  }
+
   return map;
 }
 
@@ -404,6 +453,193 @@ purchaseRequestsRouter.post(
   },
 );
 
+const createManualPrSchema = z.object({
+  workOrderId: z.number().int().positive(),
+  items: z
+    .array(
+      z.object({
+        description: z.string().min(1).max(500),
+        qty: z.number().positive(),
+        unit: z.string().min(1).max(50).optional(),
+      }),
+    )
+    .min(1),
+});
+
+async function getBomRequestItemsForWorkOrder(workOrderId: number) {
+  const items = await db
+    .select()
+    .from(workOrderItemsTable)
+    .where(eq(workOrderItemsTable.workOrderId, workOrderId));
+
+  type BomPrItem = {
+    productId: number | null;
+    description: string;
+    qty: number;
+    unit: string | null;
+  };
+  const aggregated: BomPrItem[] = [];
+
+  for (const item of items) {
+    const woQty = parseFloat(item.qty);
+    let product: typeof inventoryItemsTable.$inferSelect | undefined;
+    if (item.productId) {
+      [product] = await db
+        .select()
+        .from(inventoryItemsTable)
+        .where(eq(inventoryItemsTable.id, item.productId));
+    }
+
+    let bomId = product?.bomTemplateId ?? null;
+    if (!bomId && product) {
+      const [bomRow] = await db
+        .select()
+        .from(bomTemplatesTable)
+        .where(
+          and(
+            eq(bomTemplatesTable.finishedItemId, product.id),
+            eq(bomTemplatesTable.isActive, true),
+          ),
+        );
+      bomId = bomRow?.id ?? null;
+    }
+
+    if (bomId && product) {
+      const lines = await db
+        .select({ line: bomLineItemsTable, raw: inventoryItemsTable })
+        .from(bomLineItemsTable)
+        .leftJoin(
+          inventoryItemsTable,
+          eq(inventoryItemsTable.id, bomLineItemsTable.rawMaterialItemId),
+        )
+        .where(eq(bomLineItemsTable.bomId, bomId));
+
+      for (const row of lines) {
+        if (!row.raw) continue;
+        aggregated.push({
+          productId: row.raw.id,
+          description: row.raw.name,
+          qty: parseFloat(row.line.qty) * woQty,
+          unit: row.line.unit ?? row.raw.unit ?? null,
+        });
+      }
+    } else {
+      aggregated.push({
+        productId: product?.id ?? null,
+        description: product?.name ?? item.description,
+        qty: woQty,
+        unit: product?.unit ?? item.unit ?? null,
+      });
+    }
+  }
+
+  const merged = new Map<string, BomPrItem>();
+  for (const item of aggregated) {
+    const key = item.productId ? `product:${item.productId}` : `desc:${item.description.trim().toLowerCase()}`;
+    const prev = merged.get(key);
+    if (prev) prev.qty += item.qty;
+    else merged.set(key, { ...item });
+  }
+  return Array.from(merged.values());
+}
+
+purchaseRequestsRouter.get(
+  "/work-orders/:id/bom-items",
+  requireRole(...EDIT_ROLES),
+  async (req, res) => {
+    const workOrderId = Number(req.params.id);
+    if (!Number.isFinite(workOrderId) || workOrderId <= 0) {
+      res.status(400).json({ error: "Invalid work order id" });
+      return;
+    }
+    const [wo] = await db
+      .select({ id: workOrdersTable.id })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, workOrderId));
+    if (!wo) {
+      res.status(404).json({ error: "Work Order not found" });
+      return;
+    }
+    res.json(await getBomRequestItemsForWorkOrder(workOrderId));
+  },
+);
+
+purchaseRequestsRouter.post(
+  "/purchase-requests",
+  requireRole(...EDIT_ROLES),
+  async (req, res) => {
+    const parsed = createManualPrSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+      return;
+    }
+
+    const { workOrderId, items } = parsed.data;
+    const [wo] = await db
+      .select()
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, workOrderId));
+    if (!wo) {
+      res.status(404).json({ error: "Work Order not found" });
+      return;
+    }
+    if (wo.status === "delivered" || wo.status === "cancelled") {
+      res.status(400).json({ error: "Cannot create a Purchase Request for this Work Order status" });
+      return;
+    }
+
+    const existing = await db
+      .select()
+      .from(purchaseRequestsTable)
+      .where(
+        and(
+          eq(purchaseRequestsTable.workOrderId, workOrderId),
+          inArray(purchaseRequestsTable.status, ["proposed", "approved"]),
+        ),
+      );
+    if (existing.length > 0) {
+      res.status(409).json({
+        error: "An active Purchase Request already exists for this WO",
+        purchaseRequestId: existing[0].id,
+      });
+      return;
+    }
+
+    const prNumber = await generatePrNumber();
+    const [pr] = await db
+      .insert(purchaseRequestsTable)
+      .values({
+        prNumber,
+        workOrderId,
+        status: "proposed",
+        createdById: req.session.userId ?? null,
+      })
+      .returning();
+
+    const itemsToInsert = await Promise.all(
+      items.map(async (item) => {
+        const master = await findInventoryItemForPrLine(item.description);
+        return {
+        purchaseRequestId: pr.id,
+        workOrderItemId: null,
+        productId: master?.id ?? null,
+        branch: "raw" as const,
+        description: master?.name ?? item.description.trim(),
+        unit: item.unit ?? master?.unit ?? "pcs",
+        requiredQty: item.qty.toString(),
+        onHandQty: "0",
+        shortfallQty: item.qty.toString(),
+        estimatedUnitCost: master?.defaultPurchasePrice ?? "0",
+      };
+      }),
+    );
+    await db.insert(purchaseRequestItemsTable).values(itemsToInsert);
+
+    const detail = await buildPrDetail(pr.id, req.session.userRole ?? null);
+    res.status(201).json(detail);
+  },
+);
+
 // Shared helper that returns the full PR Detail payload (matches OpenAPI
 // PurchaseRequestDetail). Used by GET /:id and POST /work-orders/:id/release
 // so both endpoints emit a payload that satisfies the generated client type.
@@ -564,7 +800,9 @@ purchaseRequestsRouter.get(
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(desc(purchaseRequestsTable.id));
 
-    const totals = await getPrItemTotals(rows.map((r) => r.pr.id));
+    const prIds = rows.map((r) => r.pr.id);
+    const totals = await getPrItemTotals(prIds);
+    const itemSummaries = await getPrItemSummaries(prIds);
     const showPrices = canViewPrices(req.session.userRole ?? null);
 
     res.json(
@@ -579,6 +817,7 @@ purchaseRequestsRouter.get(
             createdBy: r.createdBy ? { name: r.createdBy.name } : null,
             approvedBy: null,
             itemCount: t?.itemCount ?? 0,
+            itemSummaries: itemSummaries.get(r.pr.id) ?? [],
             totalEstimatedValue: t?.totalEstimatedValue ?? 0,
           },
           showPrices,
@@ -788,19 +1027,35 @@ purchaseRequestsRouter.patch(
         // shortfallQty equals requiredQty — the full quantity drives
         // PO/import line creation when the PR is approved.
         if (data.addItems && data.addItems.length > 0) {
-          const toInsert = data.addItems.map((it) => ({
-            purchaseRequestId: id,
-            workOrderItemId: null,
-            productId: null,
-            branch: it.branch,
-            description: it.description,
-            unit: it.unit ?? "pcs",
-            requiredQty: it.shortfallQty.toString(),
-            onHandQty: "0",
-            shortfallQty: it.shortfallQty.toString(),
-            estimatedUnitCost: (it.estimatedUnitCost ?? 0).toString(),
-            notes: it.notes ?? null,
-          }));
+          const toInsert = await Promise.all(
+            data.addItems.map(async (it) => {
+              const normalized = it.description.trim().toLowerCase();
+              const [master] = await tx
+                .select()
+                .from(inventoryItemsTable)
+                .where(
+                  sql`lower(trim(${inventoryItemsTable.name})) = ${normalized}
+                    OR lower(trim(${inventoryItemsTable.itemCode})) = ${normalized}`,
+                )
+                .limit(1);
+              return {
+                purchaseRequestId: id,
+                workOrderItemId: null,
+                productId: master?.id ?? null,
+                branch: it.branch,
+                description: master?.name ?? it.description,
+                unit: it.unit ?? master?.unit ?? "pcs",
+                requiredQty: it.shortfallQty.toString(),
+                onHandQty: "0",
+                shortfallQty: it.shortfallQty.toString(),
+                estimatedUnitCost:
+                  it.estimatedUnitCost !== undefined
+                    ? it.estimatedUnitCost.toString()
+                    : (master?.defaultPurchasePrice ?? "0"),
+                notes: it.notes ?? null,
+              };
+            }),
+          );
           await tx.insert(purchaseRequestItemsTable).values(toInsert);
         }
       });

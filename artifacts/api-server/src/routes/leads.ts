@@ -12,12 +12,13 @@ const leadsRouter = Router();
 const SALES_ROLES = ["sales", "manager", "director", "admin"] as const;
 const VIEW_ROLES = ["sales", "manager", "director", "admin", "cfo"] as const;
 
-const createLeadSchema = z.object({
+const leadBodySchema = z.object({
   customerName: z.string().min(1),
   company: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   gstNumber: z.string().optional(),
+  panNumber: z.string().optional(),
   billingAddress: z.string().optional(),
   deliveryAddress: z.string().optional(),
   state: z.string().optional(),
@@ -32,7 +33,15 @@ const createLeadSchema = z.object({
   lastFollowupAt: z.string().datetime().optional(),
 });
 
-const updateLeadSchema = createLeadSchema.partial().extend({
+const createLeadSchema = leadBodySchema.refine(
+  (data) => Boolean(data.gstNumber?.trim() || data.panNumber?.trim()),
+  {
+    message: "Either GST number or PAN number is required",
+    path: ["gstNumber"],
+  },
+);
+
+const updateLeadSchema = leadBodySchema.partial().extend({
   status: z
     .enum(["new", "contacted", "proposalSent", "negotiating", "won", "lost", "onHold"])
     .optional(),
@@ -50,6 +59,7 @@ function serializeLead(
     phone: lead.phone ?? null,
     email: lead.email ?? null,
     gstNumber: lead.gstNumber ?? null,
+    panNumber: lead.panNumber ?? null,
     billingAddress: lead.billingAddress ?? null,
     deliveryAddress: lead.deliveryAddress ?? null,
     state: lead.state ?? null,
@@ -318,6 +328,7 @@ leadsRouter.patch(
       "phone",
       "email",
       "gstNumber",
+      "panNumber",
       "billingAddress",
       "deliveryAddress",
       "state",
@@ -411,8 +422,10 @@ function calcTotals(
     0,
   );
   const discountAmount = (lineSubtotal * discountPercent) / 100;
-  const packingChargesAmount = (lineSubtotal * packingChargesPercent) / 100;
-  const taxable = lineSubtotal - discountAmount + packingChargesAmount;
+  const discountedSubtotal = lineSubtotal - discountAmount;
+  const packingChargesAmount =
+    (discountedSubtotal * packingChargesPercent) / 100;
+  const taxable = discountedSubtotal + packingChargesAmount;
   const gstAmount = (taxable * gstRate) / 100;
   const total = taxable + gstAmount;
   return {
@@ -833,6 +846,23 @@ leadsRouter.patch(
     }
 
     const userRole = req.session.userRole ?? "";
+    const [existing] = await db
+      .select()
+      .from(proposalsTable)
+      .where(eq(proposalsTable.id, id));
+
+    if (!existing) {
+      res.status(404).json({ error: "Proposal not found" });
+      return;
+    }
+
+    if (existing.status === "won" && !["admin", "director"].includes(userRole)) {
+      res.status(403).json({
+        error: "Proposal is marked Won and is locked. Admin or Director override is required to edit it.",
+      });
+      return;
+    }
+
     if (
       parsed.data.discountPercent !== undefined &&
       parsed.data.discountPercent > DISCOUNT_LIMIT_NO_APPROVAL &&
@@ -852,16 +882,6 @@ leadsRouter.patch(
       status,
       ...rest
     } = parsed.data;
-
-    const [existing] = await db
-      .select()
-      .from(proposalsTable)
-      .where(eq(proposalsTable.id, id));
-
-    if (!existing) {
-      res.status(404).json({ error: "Proposal not found" });
-      return;
-    }
 
     const updateData: Record<string, unknown> = { ...rest };
     if (lineItems !== undefined) updateData.lineItems = lineItems;

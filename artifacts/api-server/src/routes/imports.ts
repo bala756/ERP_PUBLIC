@@ -7,6 +7,9 @@ import {
   importCostAllocationsTable,
   inventoryItemsTable,
   purchaseOrdersTable,
+  poLineItemsTable,
+  purchaseRequestsTable,
+  purchaseRequestItemsTable,
   usersTable,
   stockMovementsTable,
   stockTransactionsTable,
@@ -78,10 +81,12 @@ const createJobSchema = z.object({
   vendorCountry: z.string().max(100).optional(),
   currency: z.string().min(1).max(10).default("USD"),
   exchangeRate: z.number().positive().default(83),
+  purchaseRequestId: z.number().int().positive().optional().nullable(),
   purchaseOrderId: z.number().int().positive().optional().nullable(),
   supplierInvoiceNumber: z.string().max(100).optional().nullable(),
   supplierInvoiceDate: z.string().max(20).optional().nullable(),
   supplierInvoiceAmount: z.number().min(0).default(0),
+  containerCbm: z.number().min(0).default(0),
   containerNumber: z.string().max(50).optional().nullable(),
   blNumber: z.string().max(100).optional().nullable(),
   vesselName: z.string().max(100).optional().nullable(),
@@ -102,9 +107,10 @@ const itemSchema = z.object({
   qty: z.number().min(0),
   unit: z.string().max(50).default("pcs"),
   unitPriceForeign: z.number().min(0),
+  exchangeRate: z.number().positive().default(83),
   unitCbm: z.number().min(0).default(0),
   unitGrossWeight: z.number().min(0).default(0),
-  dutyPercent: z.number().min(0).max(100).default(0),
+  dutyPercent: z.number().min(0).max(100).default(20),
   swsPercent: z.number().min(0).max(100).default(10),
   igstPercent: z.number().min(0).max(100).default(18),
 });
@@ -133,6 +139,92 @@ async function generateJobNumber(): Promise<string> {
   );
   const seq = (result.rows[0] as { nextval: number }).nextval;
   return `IMP-${year}-${String(seq).padStart(4, "0")}`;
+}
+
+async function generatePoNumber(): Promise<string> {
+  const result = await db.execute<{ nextval: string }>(
+    sql`SELECT nextval('po_seq')`,
+  );
+  const seq = String(result.rows[0].nextval).padStart(4, "0");
+  const year = new Date().getFullYear().toString().slice(-2);
+  return `PO-${year}-${seq}`;
+}
+
+async function syncImportPurchaseOrder(jobId: number): Promise<void> {
+  const [job] = await db
+    .select()
+    .from(importJobsTable)
+    .where(eq(importJobsTable.id, jobId));
+  if (!job?.purchaseRequestId) return;
+
+  const [pr] = await db
+    .select()
+    .from(purchaseRequestsTable)
+    .where(eq(purchaseRequestsTable.id, job.purchaseRequestId));
+  if (!pr) return;
+
+  const items = await db
+    .select()
+    .from(importJobItemsTable)
+    .where(eq(importJobItemsTable.importJobId, jobId));
+  if (items.length === 0) return;
+
+  const total = items.reduce((sum, item) => sum + num(item.landedCostInr), 0);
+  let purchaseOrderId = job.purchaseOrderId;
+
+  if (!purchaseOrderId) {
+    const poNumber = await generatePoNumber();
+    const [po] = await db
+      .insert(purchaseOrdersTable)
+      .values({
+        poNumber,
+        workOrderId: pr.workOrderId,
+        supplierName: job.vendorName,
+        type: "imported",
+        quotedAmount: total.toFixed(2),
+        poAmount: total.toFixed(2),
+        status: "draft",
+        createdById: job.createdById ?? null,
+        notes: `Auto-created from import job ${job.jobNumber}`,
+      })
+      .returning();
+    purchaseOrderId = po.id;
+    await db
+      .update(importJobsTable)
+      .set({ purchaseOrderId, updatedAt: new Date() })
+      .where(eq(importJobsTable.id, jobId));
+  } else {
+    await db
+      .update(purchaseOrdersTable)
+      .set({
+        supplierName: job.vendorName,
+        quotedAmount: total.toFixed(2),
+        poAmount: total.toFixed(2),
+        updatedAt: new Date(),
+      })
+      .where(eq(purchaseOrdersTable.id, purchaseOrderId));
+    await db
+      .delete(poLineItemsTable)
+      .where(eq(poLineItemsTable.purchaseOrderId, purchaseOrderId));
+  }
+
+  await db.insert(poLineItemsTable).values(
+    items.map((item) => ({
+      purchaseOrderId: purchaseOrderId!,
+      productId: item.inventoryItemId ?? null,
+      description: item.description,
+      hsnCode: item.hsnCode ?? null,
+      unit: item.unit,
+      qty: item.qty,
+      unitPrice: item.perUnitLandedCostInr,
+      gstRate: "0",
+    })),
+  );
+
+  await db
+    .update(purchaseRequestItemsTable)
+    .set({ status: "convertedToImport", importJobId: jobId })
+    .where(eq(purchaseRequestItemsTable.purchaseRequestId, pr.id));
 }
 
 function num(v: unknown): number {
@@ -176,7 +268,7 @@ async function recalculateLandedCost(jobId: number): Promise<void> {
     .where(eq(importExpensesTable.importJobId, jobId));
 
   // Compute totals per basis using actual item values
-  const totalCbm = items.reduce((s, it) => s + num(it.qty) * num(it.unitCbm), 0);
+  const totalCbm = items.reduce((s, it) => s + num(it.unitCbm), 0);
   const totalQty = items.reduce((s, it) => s + num(it.qty), 0);
   const totalWeight = items.reduce(
     (s, it) => s + num(it.qty) * num(it.unitGrossWeight),
@@ -245,7 +337,7 @@ async function recalculateLandedCost(jobId: number): Promise<void> {
     if (method === "cbm") {
       totalBasis = totalCbm;
       for (const it of items) {
-        itemBasis.set(it.id, num(it.qty) * num(it.unitCbm));
+        itemBasis.set(it.id, num(it.unitCbm));
       }
     } else if (method === "value") {
       totalBasis = totalValue;
@@ -342,15 +434,9 @@ async function recalculateLandedCost(jobId: number): Promise<void> {
   // Now compute landed cost per item
   for (const it of items) {
     const qty = num(it.qty);
-    const exw = qty * num(it.unitPriceForeign) * num(/* converted via job rate */ 1);
-    // exwCostInr should use the job's exchange rate
-    const job = await db
-      .select({ exchangeRate: importJobsTable.exchangeRate })
-      .from(importJobsTable)
-      .where(eq(importJobsTable.id, jobId))
-      .limit(1);
-    const jobRate = num(job[0]?.exchangeRate ?? 1);
-    const exwInr = round2(qty * num(it.unitPriceForeign) * jobRate);
+    const exwInr = round2(
+      qty * num(it.unitPriceForeign) * num(it.exchangeRate),
+    );
 
     const bucket = itemAlloc[it.id];
     let freight = round2(bucket.freight);
@@ -399,6 +485,8 @@ async function recalculateLandedCost(jobId: number): Promise<void> {
       })
       .where(eq(importJobItemsTable.id, it.id));
   }
+
+  await syncImportPurchaseOrder(jobId);
 }
 
 // ---------- Routes ----------
@@ -420,11 +508,13 @@ importsRouter.get(
           vendorCountry: importJobsTable.vendorCountry,
           currency: importJobsTable.currency,
           exchangeRate: importJobsTable.exchangeRate,
+          purchaseRequestId: importJobsTable.purchaseRequestId,
           status: importJobsTable.status,
           eta: importJobsTable.eta,
           etd: importJobsTable.etd,
           arrivalDate: importJobsTable.arrivalDate,
           containerNumber: importJobsTable.containerNumber,
+          containerCbm: importJobsTable.containerCbm,
           supplierInvoiceAmount: importJobsTable.supplierInvoiceAmount,
           createdAt: importJobsTable.createdAt,
           updatedAt: importJobsTable.updatedAt,
@@ -505,10 +595,12 @@ importsRouter.post(
           vendorCountry: data.vendorCountry ?? "China",
           currency: data.currency,
           exchangeRate: data.exchangeRate.toString(),
+          purchaseRequestId: data.purchaseRequestId ?? null,
           purchaseOrderId: data.purchaseOrderId ?? null,
           supplierInvoiceNumber: data.supplierInvoiceNumber ?? null,
           supplierInvoiceDate: data.supplierInvoiceDate ?? null,
           supplierInvoiceAmount: data.supplierInvoiceAmount.toString(),
+          containerCbm: data.containerCbm.toString(),
           containerNumber: data.containerNumber ?? null,
           blNumber: data.blNumber ?? null,
           vesselName: data.vesselName ?? null,
@@ -559,6 +651,7 @@ importsRouter.get(
           qty: importJobItemsTable.qty,
           unit: importJobItemsTable.unit,
           unitPriceForeign: importJobItemsTable.unitPriceForeign,
+          exchangeRate: importJobItemsTable.exchangeRate,
           unitCbm: importJobItemsTable.unitCbm,
           unitGrossWeight: importJobItemsTable.unitGrossWeight,
           dutyPercent: importJobItemsTable.dutyPercent,
@@ -649,6 +742,8 @@ importsRouter.patch(
       if (data.currency !== undefined) update.currency = data.currency;
       if (data.exchangeRate !== undefined)
         update.exchangeRate = data.exchangeRate.toString();
+      if (data.purchaseRequestId !== undefined)
+        update.purchaseRequestId = data.purchaseRequestId;
       if (data.purchaseOrderId !== undefined)
         update.purchaseOrderId = data.purchaseOrderId;
       if (data.supplierInvoiceNumber !== undefined)
@@ -657,6 +752,8 @@ importsRouter.patch(
         update.supplierInvoiceDate = data.supplierInvoiceDate;
       if (data.supplierInvoiceAmount !== undefined)
         update.supplierInvoiceAmount = data.supplierInvoiceAmount.toString();
+      if (data.containerCbm !== undefined)
+        update.containerCbm = data.containerCbm.toString();
       if (data.containerNumber !== undefined)
         update.containerNumber = data.containerNumber;
       if (data.blNumber !== undefined) update.blNumber = data.blNumber;
@@ -726,7 +823,7 @@ importsRouter.post(
       // If inventoryItemId provided, hydrate defaults from product master
       let unitCbm = d.unitCbm;
       let unitGross = d.unitGrossWeight;
-      let dutyPercent = d.dutyPercent;
+      let dutyPercent = 20;
       let hsn = d.hsnCode;
       if (d.inventoryItemId) {
         const [it] = await db
@@ -736,7 +833,6 @@ importsRouter.post(
         if (it) {
           if (!unitCbm) unitCbm = num(it.unitCbm);
           if (!unitGross) unitGross = num(it.grossWeightKg);
-          if (!dutyPercent) dutyPercent = num(it.dutyPercent);
           if (!hsn) hsn = it.hsnCode ?? undefined;
         }
       }
@@ -750,9 +846,10 @@ importsRouter.post(
           qty: d.qty.toString(),
           unit: d.unit,
           unitPriceForeign: d.unitPriceForeign.toString(),
+          exchangeRate: d.exchangeRate.toString(),
           unitCbm: unitCbm.toString(),
           unitGrossWeight: unitGross.toString(),
-          dutyPercent: dutyPercent.toString(),
+          dutyPercent: "20",
           swsPercent: d.swsPercent.toString(),
           igstPercent: d.igstPercent.toString(),
         })
@@ -793,11 +890,12 @@ importsRouter.patch(
       if (d.unit !== undefined) update.unit = d.unit;
       if (d.unitPriceForeign !== undefined)
         update.unitPriceForeign = d.unitPriceForeign.toString();
+      if (d.exchangeRate !== undefined)
+        update.exchangeRate = d.exchangeRate.toString();
       if (d.unitCbm !== undefined) update.unitCbm = d.unitCbm.toString();
       if (d.unitGrossWeight !== undefined)
         update.unitGrossWeight = d.unitGrossWeight.toString();
-      if (d.dutyPercent !== undefined)
-        update.dutyPercent = d.dutyPercent.toString();
+      update.dutyPercent = "20";
       if (d.swsPercent !== undefined)
         update.swsPercent = d.swsPercent.toString();
       if (d.igstPercent !== undefined)

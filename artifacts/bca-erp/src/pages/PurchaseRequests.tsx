@@ -5,12 +5,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   useGetPurchaseRequests,
   useGetPurchaseRequest,
-  useApprovePurchaseRequest,
   useRejectPurchaseRequest,
+  useApprovePurchaseRequest,
   useUpdatePurchaseRequest,
+  useGetWorkOrders,
+  getGetPurchaseRequestsQueryKey,
+  customFetch,
   PurchaseRequestItemBranch,
   type PurchaseRequest,
+  type PurchaseRequestDetail,
   type PurchaseRequestItem,
+  type WorkOrder,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -28,8 +33,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ClipboardList, ExternalLink, CheckCircle2, XCircle,
-  Factory, Package, Ship, Trash2, Plus,
+  ClipboardList, ExternalLink, XCircle, Trash2, Plus, Factory, Package, Ship,
 } from "lucide-react";
 
 function formatDate(iso: string) {
@@ -65,13 +69,17 @@ function canViewPrices(role: string | undefined | null): boolean {
 }
 
 export default function PurchaseRequests() {
-  const { user } = useAuth();
-  const showPrices = canViewPrices(user?.role);
   const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [branchFilter, setBranchFilter] = useState<string>("all");
   const [woFilter, setWoFilter] = useState<string>("");
   const [openId, setOpenId] = useState<number | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState("");
+  const [requestItems, setRequestItems] = useState([{ description: "", qty: "1" }]);
+  const [creating, setCreating] = useState(false);
+  const [loadingBomItems, setLoadingBomItems] = useState(false);
 
   // Deep-link support: ?prId=<id> auto-opens that PR's detail dialog.
   // Used by WO Release flow to navigate straight to the resulting PR.
@@ -84,15 +92,82 @@ export default function PurchaseRequests() {
     }
   }, []);
 
-  const params: { status?: PurchaseRequest["status"]; branch?: string; workOrderId?: number } = {};
+  const params: { status?: PurchaseRequest["status"]; workOrderId?: number } = {};
   if (statusFilter !== "all") params.status = statusFilter as PurchaseRequest["status"];
-  if (branchFilter !== "all") params.branch = branchFilter;
   const woNum = Number(woFilter);
   if (woFilter && Number.isFinite(woNum) && woNum > 0) params.workOrderId = woNum;
 
   const { data: rows = [], isLoading } = useGetPurchaseRequests(
     Object.keys(params).length ? params : undefined,
   );
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useGetWorkOrders();
+  const availableWorkOrders = workOrders.filter(
+    (wo: WorkOrder) => wo.status !== "delivered" && wo.status !== "cancelled",
+  );
+
+  async function fetchBomItems() {
+    if (!selectedWorkOrderId) return;
+    setLoadingBomItems(true);
+    try {
+      const items = await customFetch<Array<{ description: string; qty: number; unit?: string | null }>>(
+        `/api/work-orders/${selectedWorkOrderId}/bom-items`,
+      );
+      if (items.length === 0) {
+        toast({ title: "No BOM items found for this Work Order" });
+        return;
+      }
+      setRequestItems(items.map((item) => ({ description: item.description, qty: String(item.qty) })));
+      toast({ title: "BOM items loaded into purchase request" });
+    } catch (error) {
+      toast({
+        title: error instanceof Error ? error.message : "Failed to fetch BOM items",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingBomItems(false);
+    }
+  }
+
+  async function handleCreatePurchaseRequest(e: React.FormEvent) {
+    e.preventDefault();
+    const workOrderId = Number(selectedWorkOrderId);
+    if (!Number.isFinite(workOrderId) || workOrderId <= 0) {
+      toast({ title: "Choose a Work Order number", variant: "destructive" });
+      return;
+    }
+    const items = requestItems
+      .map((item) => ({
+        description: item.description.trim(),
+        qty: Number(item.qty),
+      }))
+      .filter((item) => item.description && Number.isFinite(item.qty) && item.qty > 0);
+    if (items.length === 0 || items.length !== requestItems.length) {
+      toast({ title: "Enter item name and positive quantity for each line", variant: "destructive" });
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const pr = await customFetch<PurchaseRequestDetail>("/api/purchase-requests", {
+        method: "POST",
+        body: JSON.stringify({ workOrderId, items }),
+        responseType: "json",
+      });
+      qc.invalidateQueries({ queryKey: getGetPurchaseRequestsQueryKey() });
+      setCreateOpen(false);
+      setSelectedWorkOrderId("");
+      setRequestItems([{ description: "", qty: "1" }]);
+      setOpenId(pr.id);
+      toast({ title: `Purchase Request ${pr.prNumber} created` });
+    } catch (error) {
+      toast({
+        title: error instanceof Error ? error.message : "Failed to create purchase request",
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -103,10 +178,19 @@ export default function PurchaseRequests() {
             Purchase Requests
           </h1>
           <p className="text-sm text-muted-foreground">
-            BOM-exploded shortfalls from released Work Orders
+            Material requests for commissioning and manufacturing work orders
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            data-testid="button-new-purchase-request"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Purchase Request
+          </Button>
           <Label className="text-sm">WO #:</Label>
           <Input
             type="number"
@@ -117,18 +201,6 @@ export default function PurchaseRequests() {
             className="h-9 w-28"
             data-testid="input-pr-wo-filter"
           />
-          <Label className="text-sm">Branch:</Label>
-          <Select value={branchFilter} onValueChange={setBranchFilter}>
-            <SelectTrigger className="w-40" data-testid="select-pr-branch">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Branches</SelectItem>
-              <SelectItem value="manufactured">Manufactured</SelectItem>
-              <SelectItem value="raw">Raw Material</SelectItem>
-              <SelectItem value="imported">Imported</SelectItem>
-            </SelectContent>
-          </Select>
           <Label className="text-sm">Status:</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40" data-testid="select-pr-status">
@@ -150,13 +222,12 @@ export default function PurchaseRequests() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>PR #</TableHead>
-                <TableHead>Work Order</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                {showPrices && <TableHead className="text-right">Est. Value</TableHead>}
+                <TableHead className="w-16">S.no</TableHead>
+                <TableHead>Items name</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead>Work order number</TableHead>
                 <TableHead>Raised By</TableHead>
-                <TableHead>Raised On</TableHead>
+                <TableHead>Raised on date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-32" />
               </TableRow>
@@ -165,23 +236,50 @@ export default function PurchaseRequests() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={showPrices ? 9 : 8}>
+                    <TableCell colSpan={8}>
                       <Skeleton className="h-6 w-full" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={showPrices ? 9 : 8} className="text-center text-muted-foreground py-12">
-                    No purchase requests yet. Release a Work Order to generate one.
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                    No purchase requests yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                rows.map((pr) => {
+                rows.map((pr, index) => {
                   const v = STATUS_VARIANTS[pr.status] ?? STATUS_VARIANTS.proposed;
+                  const items = (
+                    pr as PurchaseRequest & {
+                      itemSummaries?: { description: string; qty: number; unit?: string | null }[];
+                    }
+                  ).itemSummaries ?? [];
+                  const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
                   return (
                     <TableRow key={pr.id} data-testid={`row-pr-${pr.id}`}>
-                      <TableCell className="font-mono">{pr.prNumber}</TableCell>
+                      <TableCell className="font-medium">{index + 1}</TableCell>
+                      <TableCell>
+                        {items.length > 0 ? (
+                          <div className="space-y-1">
+                            {items.slice(0, 3).map((item, itemIndex) => (
+                              <div key={`${pr.id}-${itemIndex}`} className="text-sm">
+                                {item.description}
+                              </div>
+                            ))}
+                            {items.length > 3 && (
+                              <div className="text-xs text-muted-foreground">
+                                +{items.length - 3} more
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">No items</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {totalQty.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                      </TableCell>
                       <TableCell>
                         {pr.workOrderId ? (
                           <Button
@@ -195,13 +293,6 @@ export default function PurchaseRequests() {
                           </Button>
                         ) : "—"}
                       </TableCell>
-                      <TableCell>{pr.customerName ?? "—"}</TableCell>
-                      <TableCell className="text-right">{pr.itemCount ?? 0}</TableCell>
-                      {showPrices && (
-                        <TableCell className="text-right" data-testid={`cell-pr-est-value-${pr.id}`}>
-                          ₹{(pr.totalEstimatedValue ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                        </TableCell>
-                      )}
                       <TableCell
                         className="font-medium"
                         data-testid={`cell-pr-raised-by-${pr.id}`}
@@ -236,13 +327,135 @@ export default function PurchaseRequests() {
       {openId !== null && (
         <PurchaseRequestDetail id={openId} onClose={() => setOpenId(null)} />
       )}
+
+      <Dialog open={createOpen} onOpenChange={(open) => {
+        setCreateOpen(open);
+        if (!open) {
+          setSelectedWorkOrderId("");
+          setRequestItems([{ description: "", qty: "1" }]);
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>New Purchase Request</DialogTitle>
+            <DialogDescription>
+              Choose the Work Order number, then enter only the item names and quantities required.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreatePurchaseRequest} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Work Order number *</Label>
+              <Select
+                value={selectedWorkOrderId}
+                onValueChange={setSelectedWorkOrderId}
+                disabled={workOrdersLoading || creating}
+              >
+                <SelectTrigger data-testid="select-pr-work-order">
+                  <SelectValue placeholder={workOrdersLoading ? "Loading work orders..." : "Choose Work Order"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableWorkOrders.map((wo: WorkOrder) => (
+                    <SelectItem key={wo.id} value={String(wo.id)}>
+                      {wo.woNumber} - {wo.customerName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!workOrdersLoading && availableWorkOrders.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No active Work Orders are available.
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={fetchBomItems}
+                disabled={!selectedWorkOrderId || loadingBomItems || creating}
+              >
+                {loadingBomItems ? "Fetching BOM..." : "Fetch BOM Items"}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_120px_36px] gap-2 text-xs font-medium text-muted-foreground">
+                <span>Item name *</span>
+                <span>Qty *</span>
+                <span />
+              </div>
+              {requestItems.map((item, index) => (
+                <div key={index} className="grid grid-cols-[1fr_120px_36px] gap-2 items-center">
+                  <Input
+                    value={item.description}
+                    onChange={(e) => {
+                      const next = [...requestItems];
+                      next[index] = { ...next[index], description: e.target.value };
+                      setRequestItems(next);
+                    }}
+                    placeholder="Item name"
+                    data-testid={`input-new-pr-item-${index}`}
+                  />
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={item.qty}
+                    onChange={(e) => {
+                      const next = [...requestItems];
+                      next[index] = { ...next[index], qty: e.target.value };
+                      setRequestItems(next);
+                    }}
+                    data-testid={`input-new-pr-qty-${index}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-destructive"
+                    disabled={requestItems.length === 1 || creating}
+                    onClick={() => setRequestItems(requestItems.filter((_, i) => i !== index))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRequestItems([...requestItems, { description: "", qty: "1" }])}
+                disabled={creating}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Item
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateOpen(false)}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!selectedWorkOrderId || creating}
+                data-testid="button-create-purchase-request"
+              >
+                {creating ? "Creating..." : "Create Purchase Request"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => void }) {
+  const showPrices = false;
   const { user } = useAuth();
-  const showPrices = canViewPrices(user?.role);
   const { data: pr, isLoading } = useGetPurchaseRequest(id);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -264,9 +477,10 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
     shortfallQty: "1",
     estimatedUnitCost: "0",
   });
-  const approve = useApprovePurchaseRequest();
   const reject = useRejectPurchaseRequest();
+  const approve = useApprovePurchaseRequest();
   const update = useUpdatePurchaseRequest();
+  const canApprove = !!user && ["manager", "director", "admin", "cfo"].includes(user.role);
 
   // Build PATCH payload. For raiser-only roles (showPrices=false) we never
   // include estimatedUnitCost so we cannot accidentally overwrite hidden
@@ -280,10 +494,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
           const currentCost = it.estimatedUnitCost ?? 0;
           const q = e.qty !== undefined ? parseFloat(e.qty) : it.shortfallQty;
           const qtyChanged = !isNaN(q) && q !== it.shortfallQty;
-          if (!showPrices) return qtyChanged;
-          const c = e.cost !== undefined ? parseFloat(e.cost) : currentCost;
-          const costChanged = !isNaN(c) && c !== currentCost;
-          return qtyChanged || costChanged;
+          return qtyChanged;
         })
         .map((it: PurchaseRequestItem) => {
           const e = edits[it.id];
@@ -293,10 +504,6 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
             shortfallQty:
               e?.qty !== undefined ? parseFloat(e.qty) : it.shortfallQty,
           };
-          if (showPrices) {
-            base.estimatedUnitCost =
-              e?.cost !== undefined ? parseFloat(e.cost) : currentCost;
-          }
           return base;
         })
     : [];
@@ -337,11 +544,6 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
       unit: newItem.unit || "pcs",
       shortfallQty: qty,
     };
-    // Only include cost when this role is allowed to see/set prices.
-    // Server also strips this for raiser-only roles as defence in depth.
-    if (showPrices) {
-      addItem.estimatedUnitCost = Number.isFinite(cost) ? cost : 0;
-    }
     await update.mutateAsync(
       {
         id,
@@ -374,31 +576,13 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
       { id, data: { items: dirtyItems } },
       {
         onSuccess: () => {
-          toast({ title: "PR updated", description: "Quantities/costs saved." });
+          toast({ title: "PR updated", description: "Quantities saved." });
           setEdits({});
           qc.invalidateQueries();
         },
         onError: (e: unknown) => {
           const msg = e instanceof Error ? e.message : "Update failed";
           toast({ title: "Failed to save", description: msg, variant: "destructive" });
-        },
-      },
-    );
-  };
-
-  const onApprove = async () => {
-    if (!pr) return;
-    await approve.mutateAsync(
-      { id, data: { vendorByItemId: vendors } },
-      {
-        onSuccess: () => {
-          toast({ title: "PR approved", description: "POs / import jobs have been created." });
-          qc.invalidateQueries();
-          onClose();
-        },
-        onError: (e: unknown) => {
-          const msg = e instanceof Error ? e.message : "Approval failed";
-          toast({ title: "Failed to approve", description: msg, variant: "destructive" });
         },
       },
     );
@@ -412,6 +596,23 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
           toast({ title: "PR cancelled" });
           qc.invalidateQueries();
           onClose();
+        },
+      },
+    );
+  };
+
+  const onApprove = async () => {
+    await approve.mutateAsync(
+      { id, data: {} },
+      {
+        onSuccess: () => {
+          toast({ title: "PR approved" });
+          qc.invalidateQueries();
+          onClose();
+        },
+        onError: (e: unknown) => {
+          const msg = e instanceof Error ? e.message : "Approval failed";
+          toast({ title: "Failed to approve", description: msg, variant: "destructive" });
         },
       },
     );
@@ -440,7 +641,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
           <Skeleton className="h-48 w-full" />
         ) : (
           <>
-            <div className={`grid ${showPrices ? "grid-cols-3" : "grid-cols-2"} gap-3 mb-4`}>
+            <div className="grid grid-cols-2 gap-3 mb-4">
               <Card>
                 <CardHeader className="pb-1">
                   <CardTitle className="text-xs text-muted-foreground">Items</CardTitle>
@@ -471,13 +672,8 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Branch</TableHead>
                   <TableHead>Item</TableHead>
-                  <TableHead className="text-right">Required</TableHead>
-                  <TableHead className="text-right">On Hand</TableHead>
-                  <TableHead className="text-right">Shortfall (editable)</TableHead>
-                  {showPrices && <TableHead className="text-right">Est. Unit Cost (editable)</TableHead>}
-                  <TableHead>Vendor (for PO)</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead>Status</TableHead>
                   {pr.status === "proposed" && <TableHead className="w-12"></TableHead>}
                 </TableRow>
@@ -486,17 +682,8 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                 {pr.items.map((it: PurchaseRequestItem) => (
                   <TableRow key={it.id}>
                     <TableCell>
-                      <Badge variant="outline" className="gap-1">
-                        {BRANCH_ICONS[it.branch]}
-                        {BRANCH_LABELS[it.branch]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
                       <div className="font-medium">{it.description}</div>
-                      {it.productCode && <div className="text-xs font-mono text-muted-foreground">{it.productCode}</div>}
                     </TableCell>
-                    <TableCell className="text-right">{it.requiredQty}</TableCell>
-                    <TableCell className="text-right">{it.onHandQty}</TableCell>
                     <TableCell className="text-right">
                       {pr.status === "proposed" ? (
                         <Input
@@ -519,43 +706,6 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                         </span>
                       )}
                     </TableCell>
-                    {showPrices && (
-                      <TableCell className="text-right" data-testid={`cell-pr-item-cost-${it.id}`}>
-                        {pr.status === "proposed" ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            className="h-8 w-28 text-right ml-auto"
-                            value={edits[it.id]?.cost ?? String(it.estimatedUnitCost ?? 0)}
-                            onChange={(e) =>
-                              setEdits({
-                                ...edits,
-                                [it.id]: { ...edits[it.id], cost: e.target.value },
-                              })
-                            }
-                            data-testid={`input-cost-${it.id}`}
-                          />
-                        ) : (
-                          <>₹{(it.estimatedUnitCost ?? 0).toLocaleString("en-IN")}</>
-                        )}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      {pr.status === "proposed" && it.branch !== PurchaseRequestItemBranch.manufactured && it.shortfallQty > 0 ? (
-                        <Input
-                          className="h-8 w-40"
-                          placeholder="Vendor name"
-                          value={vendors[it.id] ?? ""}
-                          onChange={(e) => setVendors({ ...vendors, [it.id]: e.target.value })}
-                          data-testid={`input-vendor-${it.id}`}
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {it.purchaseOrderNumber ?? it.importJobNumber ?? "—"}
-                        </span>
-                      )}
-                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">{it.status}</Badge>
                     </TableCell>
@@ -566,7 +716,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => onRemoveItem(it.id)}
-                          disabled={update.isPending || approve.isPending || reject.isPending}
+                          disabled={update.isPending || reject.isPending}
                           title="Remove line item"
                           data-testid={`button-remove-item-${it.id}`}
                         >
@@ -585,7 +735,7 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
                   variant="outline"
                   size="sm"
                   onClick={() => setAddOpen(true)}
-                  disabled={update.isPending || approve.isPending || reject.isPending}
+                  disabled={update.isPending || reject.isPending}
                   data-testid="button-add-pr-item"
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -602,22 +752,6 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
               <DialogTitle>Add Line Item</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Branch</Label>
-                <Select
-                  value={newItem.branch}
-                  onValueChange={(v) => setNewItem({ ...newItem, branch: v as PurchaseRequestItemBranch })}
-                >
-                  <SelectTrigger data-testid="select-add-branch">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={PurchaseRequestItemBranch.manufactured}>Manufactured (in-house)</SelectItem>
-                    <SelectItem value={PurchaseRequestItemBranch.raw}>Raw (local PO)</SelectItem>
-                    <SelectItem value={PurchaseRequestItemBranch.imported}>Imported</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-1">
                 <Label className="text-xs">Description</Label>
                 <Input
@@ -680,10 +814,19 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
           <Button variant="ghost" onClick={onClose}>Close</Button>
           {pr?.status === "proposed" && (
             <>
+              {canApprove && (
+                <Button
+                  onClick={onApprove}
+                  disabled={approve.isPending || update.isPending || reject.isPending}
+                  data-testid="button-approve-pr"
+                >
+                  Approve
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={onSaveEdits}
-                disabled={update.isPending || approve.isPending || reject.isPending || dirtyItems.length === 0}
+                disabled={update.isPending || reject.isPending || approve.isPending || dirtyItems.length === 0}
                 data-testid="button-save-pr-edits"
               >
                 Save Edits{dirtyItems.length > 0 ? ` (${dirtyItems.length})` : ""}
@@ -696,15 +839,6 @@ function PurchaseRequestDetail({ id, onClose }: { id: number; onClose: () => voi
               >
                 <XCircle className="mr-2 h-4 w-4" />
                 Reject
-              </Button>
-              <Button
-                onClick={onApprove}
-                disabled={approve.isPending || update.isPending || reject.isPending || dirtyItems.length > 0}
-                data-testid="button-approve-pr"
-                title={dirtyItems.length > 0 ? "Save edits before approving" : ""}
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Approve & Create POs / Import Jobs
               </Button>
             </>
           )}

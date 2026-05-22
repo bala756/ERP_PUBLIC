@@ -67,6 +67,7 @@ type ImportJobItem = {
   qty: string;
   unit: string;
   unitPriceForeign: string;
+  exchangeRate: string;
   unitCbm: string;
   unitGrossWeight: string;
   dutyPercent: string;
@@ -110,6 +111,8 @@ type ImportJobDetail = {
   vendorCountry: string | null;
   currency: string;
   exchangeRate: string;
+  purchaseRequestId: number | null;
+  containerCbm: string;
   status: string;
   supplierInvoiceNumber: string | null;
   supplierInvoiceDate: string | null;
@@ -125,6 +128,38 @@ type ImportJobDetail = {
   purchaseOrder: { id: number; poNumber: string; supplierName: string } | null;
   items: ImportJobItem[];
   expenses: ImportExpense[];
+};
+
+type PurchaseRequestOption = {
+  id: number;
+  prNumber: string;
+  woNumber?: string | null;
+  status: string;
+};
+
+type PurchaseRequestDetail = PurchaseRequestOption & {
+  items: Array<{
+    id: number;
+    description: string;
+    shortfallQty: number;
+    requiredQty?: number;
+    onHandQty?: number;
+    unit?: string | null;
+  }>;
+};
+
+type PrShipmentRow = {
+  include: boolean;
+  description: string;
+  qty: string;
+  unit: string;
+  unitPriceForeign: string;
+  exchangeRate: string;
+  unitCbm: string;
+  unitGrossWeight: string;
+  inventoryItemId: string;
+  hsnCode: string;
+  availableStock: number;
 };
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
@@ -213,6 +248,10 @@ export default function ImportJobDetail() {
   });
 
   const { data: inventoryItems } = useGetInventoryItems();
+  const { data: purchaseRequests = [] } = useQuery({
+    queryKey: ["purchase-requests-for-import"],
+    queryFn: () => customFetch<PurchaseRequestOption[]>("/api/purchase-requests"),
+  });
 
   const recalc = useMutation({
     mutationFn: () =>
@@ -289,6 +328,35 @@ export default function ImportJobDetail() {
       }),
   });
 
+  const saveItems = useMutation({
+    mutationFn: async (items: Record<string, unknown>[]) => {
+      const purchaseRequestId = items.find(
+        (item) => item.__purchaseRequestId,
+      )?.__purchaseRequestId;
+      if (purchaseRequestId) {
+        await customFetch(`/api/import-jobs/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ purchaseRequestId }),
+        });
+      }
+      for (const body of items) {
+        const itemBody = { ...body };
+        delete itemBody.__purchaseRequestId;
+        await customFetch(`/api/import-jobs/${id}/items`, {
+          method: "POST",
+          body: JSON.stringify(itemBody),
+        });
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Items added from Purchase Request" });
+      setItemDialog({ open: false, edit: null });
+      qc.invalidateQueries({ queryKey: ["import-job", id] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+
   const deleteItem = useMutation({
     mutationFn: (itemId: number) =>
       customFetch(`/api/import-jobs/${id}/items/${itemId}`, {
@@ -349,10 +417,7 @@ export default function ImportJobDetail() {
     );
   }
 
-  const totalCbm = job.items.reduce(
-    (s, it) => s + num(it.qty) * num(it.unitCbm),
-    0,
-  );
+  const totalCbm = job.items.reduce((s, it) => s + num(it.unitCbm), 0);
   const totalQty = job.items.reduce((s, it) => s + num(it.qty), 0);
   const totalExwInr = job.items.reduce((s, it) => s + num(it.exwCostInr), 0);
   const totalLanded = job.items.reduce((s, it) => s + num(it.landedCostInr), 0);
@@ -437,10 +502,7 @@ export default function ImportJobDetail() {
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <SummaryCard label="Vendor" value={job.vendorName} sub={job.vendorCountry} />
-        <SummaryCard
-          label={`FX (${job.currency} → INR)`}
-          value={num(job.exchangeRate).toFixed(4)}
-        />
+        <SummaryCard label="Job Card CBM" value={num(job.containerCbm).toFixed(3)} />
         <SummaryCard label="Total Items" value={String(job.items.length)} sub={`${totalQty} units`} />
         <SummaryCard label="Total CBM" value={totalCbm.toFixed(3)} />
         <SummaryCard label="Total Expenses" value={fmtInr(totalExpenses)} />
@@ -819,9 +881,7 @@ export default function ImportJobDetail() {
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>vs. Supplier Invoice</span>
                 <span>
-                  {fmtInr(
-                    num(job.supplierInvoiceAmount) * num(job.exchangeRate),
-                  )}
+                  {fmtInr(num(job.supplierInvoiceAmount))}
                 </span>
               </div>
             </div>
@@ -835,9 +895,11 @@ export default function ImportJobDetail() {
         edit={itemDialog.edit}
         currency={job.currency}
         inventoryItems={(inventoryItems as InventoryItem[] | undefined) ?? []}
-        isSaving={saveItem.isPending}
+        purchaseRequests={purchaseRequests}
+        isSaving={saveItem.isPending || saveItems.isPending}
         onClose={() => setItemDialog({ open: false, edit: null })}
         onSubmit={(d) => saveItem.mutate(d)}
+        onSubmitMany={(items) => saveItems.mutate(items)}
       />
       <ExpenseDialog
         open={expenseDialog.open}
@@ -898,17 +960,21 @@ function ItemDialog({
   edit,
   currency,
   inventoryItems,
+  purchaseRequests,
   isSaving,
   onClose,
   onSubmit,
+  onSubmitMany,
 }: {
   open: boolean;
   edit: ImportJobItem | null;
   currency: string;
   inventoryItems: InventoryItem[];
+  purchaseRequests: PurchaseRequestOption[];
   isSaving: boolean;
   onClose: () => void;
   onSubmit: (d: Record<string, unknown>) => void;
+  onSubmitMany: (items: Record<string, unknown>[]) => void;
 }) {
   const [inventoryItemId, setInventoryItemId] = useState<string>(
     edit?.inventoryItemId ? String(edit.inventoryItemId) : "",
@@ -920,12 +986,16 @@ function ItemDialog({
   const [unitPriceForeign, setUnitPriceForeign] = useState(
     edit?.unitPriceForeign ?? "0",
   );
+  const [exchangeRate, setExchangeRate] = useState(edit?.exchangeRate ?? "83");
   const [unitCbm, setUnitCbm] = useState(edit?.unitCbm ?? "0");
   const [unitGrossWeight, setUnitGrossWeight] = useState(
     edit?.unitGrossWeight ?? "0",
   );
-  const [dutyPercent, setDutyPercent] = useState(edit?.dutyPercent ?? "0");
+  const [dutyPercent, setDutyPercent] = useState(edit?.dutyPercent ?? "20");
   const [swsPercent, setSwsPercent] = useState(edit?.swsPercent ?? "10");
+  const [selectedPrId, setSelectedPrId] = useState("");
+  const [prRows, setPrRows] = useState<PrShipmentRow[]>([]);
+  const [loadingPr, setLoadingPr] = useState(false);
 
   React.useEffect(() => {
     if (open && edit) {
@@ -937,10 +1007,13 @@ function ItemDialog({
       setQty(edit.qty);
       setUnit(edit.unit);
       setUnitPriceForeign(edit.unitPriceForeign);
+      setExchangeRate(edit.exchangeRate ?? "83");
       setUnitCbm(edit.unitCbm);
       setUnitGrossWeight(edit.unitGrossWeight);
-      setDutyPercent(edit.dutyPercent);
+      setDutyPercent("20");
       setSwsPercent(edit.swsPercent);
+      setSelectedPrId("");
+      setPrRows([]);
     } else if (open) {
       setInventoryItemId("");
       setDescription("");
@@ -948,12 +1021,78 @@ function ItemDialog({
       setQty("1");
       setUnit("pcs");
       setUnitPriceForeign("0");
+      setExchangeRate("83");
       setUnitCbm("0");
       setUnitGrossWeight("0");
-      setDutyPercent("0");
+      setDutyPercent("20");
       setSwsPercent("10");
+      setSelectedPrId("");
+      setPrRows([]);
     }
   }, [open, edit]);
+
+  const findInventoryMatch = (itemName: string) => {
+    const normalized = itemName.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return inventoryItems.find((item) => {
+      const name = item.name.toLowerCase();
+      const code = item.itemCode?.toLowerCase() ?? "";
+      return name === normalized || code === normalized || name.includes(normalized) || normalized.includes(name);
+    }) as
+      | (InventoryItem & {
+          unitCbm?: number;
+          grossWeightKg?: number;
+          hsnCode?: string | null;
+        })
+      | undefined;
+  };
+
+  const updatePrRow = (
+    index: number,
+    patch: Partial<PrShipmentRow>,
+  ) => {
+    setPrRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+  };
+
+  const onSelectPurchaseRequest = async (value: string) => {
+    setSelectedPrId(value);
+    setPrRows([]);
+    if (!value || value === "none") return;
+    setLoadingPr(true);
+    try {
+      const detail = await customFetch<PurchaseRequestDetail>(
+        `/api/purchase-requests/${value}`,
+      );
+      setPrRows(
+        detail.items.map((item) => {
+          const match = findInventoryMatch(item.description);
+          const availableStock =
+            item.onHandQty ?? (match ? Number(match.stockBalance ?? 0) : 0);
+          const requestedQty = item.shortfallQty ?? item.requiredQty ?? 0;
+          const importQty = Math.max(0, requestedQty);
+          return {
+            include: importQty > 0,
+            description: item.description,
+            qty: String(importQty || requestedQty || 1),
+            unit: item.unit ?? match?.unit ?? "pcs",
+            unitPriceForeign: "0",
+            exchangeRate: "83",
+            unitCbm: match?.unitCbm ? String(match.unitCbm) : "0",
+            unitGrossWeight: match?.grossWeightKg
+              ? String(match.grossWeightKg)
+              : "0",
+            inventoryItemId: match ? String(match.id) : "",
+            hsnCode: match?.hsnCode ?? "",
+            availableStock,
+          };
+        }),
+      );
+    } finally {
+      setLoadingPr(false);
+    }
+  };
 
   const onSelectItem = (val: string) => {
     setInventoryItemId(val);
@@ -971,9 +1110,34 @@ function ItemDialog({
         setUnit(it.unit);
         if (it.unitCbm) setUnitCbm(String(it.unitCbm));
         if (it.grossWeightKg) setUnitGrossWeight(String(it.grossWeightKg));
-        if (it.dutyPercent) setDutyPercent(String(it.dutyPercent));
+        setDutyPercent("20");
       }
     }
+  };
+
+  const submitPrRows = () => {
+    const selected = prRows.filter(
+      (row) => row.include && (parseFloat(row.qty) || 0) > 0,
+    );
+    onSubmitMany(
+      selected.map((row) => ({
+        inventoryItemId: row.inventoryItemId ? Number(row.inventoryItemId) : null,
+        description: row.description,
+        hsnCode: row.hsnCode || null,
+        qty: parseFloat(row.qty) || 0,
+        unit: row.unit || "pcs",
+        unitPriceForeign: parseFloat(row.unitPriceForeign) || 0,
+        exchangeRate: parseFloat(row.exchangeRate) || 83,
+        unitCbm: parseFloat(row.unitCbm) || 0,
+        unitGrossWeight: parseFloat(row.unitGrossWeight) || 0,
+        dutyPercent: 20,
+        swsPercent: 10,
+        __purchaseRequestId:
+          selectedPrId && selectedPrId !== "none"
+            ? Number(selectedPrId)
+            : undefined,
+      })),
+    );
   };
 
   return (
@@ -983,6 +1147,116 @@ function ItemDialog({
           <DialogTitle>{edit ? "Edit Item" : "Add Item"}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4">
+          {!edit && (
+            <div className="col-span-2">
+              <Label>Purchase Request number</Label>
+              <Select
+                value={selectedPrId || "none"}
+                onValueChange={(value) => void onSelectPurchaseRequest(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select PR to auto-fill item names and quantities" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Manual entry</SelectItem>
+                  {purchaseRequests.map((pr) => (
+                    <SelectItem key={pr.id} value={String(pr.id)}>
+                      {pr.prNumber}{pr.woNumber ? ` - ${pr.woNumber}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {prRows.length > 0 ? (
+            <div className="col-span-2 rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Use</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="w-24 text-right">Stock</TableHead>
+                    <TableHead className="w-28">Import Qty</TableHead>
+                    <TableHead className="w-28">Product CBM</TableHead>
+                    <TableHead className="w-32">Unit USD</TableHead>
+                    <TableHead className="w-32">USD to INR</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {prRows.map((row, index) => (
+                    <TableRow key={`${row.description}-${index}`}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={row.include}
+                          onChange={(e) =>
+                            updatePrRow(index, { include: e.target.checked })
+                          }
+                          className="h-4 w-4"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{row.description}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.inventoryItemId
+                            ? "Linked to inventory"
+                            : "No inventory match"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.availableStock} {row.unit}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={row.qty}
+                          onChange={(e) =>
+                            updatePrRow(index, { qty: e.target.value })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          value={row.unitCbm}
+                          onChange={(e) =>
+                            updatePrRow(index, { unitCbm: e.target.value })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.0001"
+                          value={row.unitPriceForeign}
+                          onChange={(e) =>
+                            updatePrRow(index, {
+                              unitPriceForeign: e.target.value,
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.0001"
+                          value={row.exchangeRate}
+                          onChange={(e) =>
+                            updatePrRow(index, {
+                              exchangeRate: e.target.value,
+                            })
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <>
           <div className="col-span-2">
             <Label>Link Inventory Item (optional)</Label>
             <Select value={inventoryItemId || "none"} onValueChange={onSelectItem}>
@@ -1034,6 +1308,15 @@ function ItemDialog({
             />
           </div>
           <div>
+            <Label>USD to INR *</Label>
+            <Input
+              type="number"
+              step="0.0001"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+            />
+          </div>
+          <div>
             <Label>Unit CBM (m³)</Label>
             <Input
               type="number"
@@ -1057,7 +1340,7 @@ function ItemDialog({
               type="number"
               step="0.01"
               value={dutyPercent}
-              onChange={(e) => setDutyPercent(e.target.value)}
+              disabled
             />
           </div>
           <div>
@@ -1069,14 +1352,28 @@ function ItemDialog({
               onChange={(e) => setSwsPercent(e.target.value)}
             />
           </div>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
           <Button
-            disabled={isSaving || !description.trim() || !qty}
-            onClick={() =>
+            disabled={
+              isSaving ||
+              loadingPr ||
+              (prRows.length > 0
+                ? prRows.filter(
+                    (row) => row.include && (parseFloat(row.qty) || 0) > 0,
+                  ).length === 0
+                : !description.trim() || !qty)
+            }
+            onClick={() => {
+              if (prRows.length > 0) {
+                submitPrRows();
+                return;
+              }
               onSubmit({
                 inventoryItemId:
                   inventoryItemId && inventoryItemId !== "none"
@@ -1087,14 +1384,21 @@ function ItemDialog({
                 qty: parseFloat(qty) || 0,
                 unit,
                 unitPriceForeign: parseFloat(unitPriceForeign) || 0,
+                exchangeRate: parseFloat(exchangeRate) || 83,
                 unitCbm: parseFloat(unitCbm) || 0,
                 unitGrossWeight: parseFloat(unitGrossWeight) || 0,
-                dutyPercent: parseFloat(dutyPercent) || 0,
+                dutyPercent: 20,
                 swsPercent: parseFloat(swsPercent) || 0,
-              })
-            }
+              });
+            }}
           >
-            {isSaving ? "Saving..." : edit ? "Update" : "Add"}
+            {isSaving || loadingPr
+              ? "Saving..."
+              : edit
+                ? "Update"
+                : prRows.length > 0
+                  ? "Add Selected"
+                  : "Add"}
           </Button>
         </DialogFooter>
       </DialogContent>

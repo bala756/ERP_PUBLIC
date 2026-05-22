@@ -6,6 +6,9 @@ import {
   bomTemplatesTable,
   bomLineItemsTable,
   usersTable,
+  purchaseOrdersTable,
+  supplierBillsTable,
+  gstInvoicesTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -64,10 +67,10 @@ const stockTransactionSchema = z.object({
 }).superRefine((data, ctx) => {
   if (data.type === "in") {
     if (!data.poNumber) ctx.addIssue({ code: "custom", path: ["poNumber"], message: "PO number is required for Stock IN" });
-    if (!data.supplierBillNumber) ctx.addIssue({ code: "custom", path: ["supplierBillNumber"], message: "Supplier bill number is required for Stock IN" });
+    if (!data.supplierBillNumber) ctx.addIssue({ code: "custom", path: ["supplierBillNumber"], message: "Bill / invoice number is required for Stock IN" });
   }
-  if (data.type === "out" && !data.dcNumber) {
-    ctx.addIssue({ code: "custom", path: ["dcNumber"], message: "DC number is required for Stock OUT" });
+  if (data.type === "out" && !data.referenceNumber && !data.poNumber && !data.supplierBillNumber && !data.dcNumber) {
+    ctx.addIssue({ code: "custom", path: ["referenceNumber"], message: "Enter PO, DC, or invoice number for Stock OUT" });
   }
 });
 
@@ -88,10 +91,10 @@ const bulkTransactionSchema = z.object({
 }).superRefine((data, ctx) => {
   if (data.type === "in") {
     if (!data.poNumber) ctx.addIssue({ code: "custom", path: ["poNumber"], message: "PO number is required for Stock IN" });
-    if (!data.supplierBillNumber) ctx.addIssue({ code: "custom", path: ["supplierBillNumber"], message: "Supplier bill number is required for Stock IN" });
+    if (!data.supplierBillNumber) ctx.addIssue({ code: "custom", path: ["supplierBillNumber"], message: "Bill / invoice number is required for Stock IN" });
   }
-  if (data.type === "out" && !data.dcNumber) {
-    ctx.addIssue({ code: "custom", path: ["dcNumber"], message: "DC number is required for Stock OUT" });
+  if (data.type === "out" && !data.referenceNumber && !data.poNumber && !data.supplierBillNumber && !data.dcNumber) {
+    ctx.addIssue({ code: "custom", path: ["referenceNumber"], message: "Enter PO, DC, or invoice number for Stock OUT" });
   }
 });
 
@@ -118,6 +121,38 @@ const updateBomSchema = z.object({
     notes: z.string().optional(),
   })).optional(),
 });
+
+async function validateStockDocumentReferences(
+  poNumber: string | undefined,
+  billOrInvoiceNumber: string | undefined,
+): Promise<string | null> {
+  const cleanPo = poNumber?.trim();
+  const cleanDoc = billOrInvoiceNumber?.trim();
+  if (!cleanPo || !cleanDoc) return "PO number and bill / invoice number are required before stock can be updated";
+
+  const [po] = await db
+    .select({ id: purchaseOrdersTable.id })
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.poNumber, cleanPo))
+    .limit(1);
+  if (!po) return `Invalid PO number: ${cleanPo}`;
+
+  const [supplierBill] = await db
+    .select({ id: supplierBillsTable.id })
+    .from(supplierBillsTable)
+    .where(eq(supplierBillsTable.billNumber, cleanDoc))
+    .limit(1);
+  if (supplierBill) return null;
+
+  const [gstInvoice] = await db
+    .select({ id: gstInvoicesTable.id })
+    .from(gstInvoicesTable)
+    .where(eq(gstInvoicesTable.invoiceNumber, cleanDoc))
+    .limit(1);
+  if (gstInvoice) return null;
+
+  return `Invalid bill / invoice number: ${cleanDoc}`;
+}
 
 function serializeItem(item: typeof inventoryItemsTable.$inferSelect, stockBalance?: number) {
   return {
@@ -354,6 +389,17 @@ inventoryRouter.post("/inventory/transactions", requireRole(...WRITE_ROLES), asy
   const parsed = stockTransactionSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
 
+  if (parsed.data.type === "in") {
+    const referenceError = await validateStockDocumentReferences(
+      parsed.data.poNumber,
+      parsed.data.supplierBillNumber,
+    );
+    if (referenceError) {
+      res.status(400).json({ error: referenceError });
+      return;
+    }
+  }
+
   const [item] = await db
     .select()
     .from(inventoryItemsTable)
@@ -395,6 +441,16 @@ inventoryRouter.post("/inventory/transactions/bulk", requireRole(...WRITE_ROLES)
   if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
 
   const { items: txItems, ...rest } = parsed.data;
+  if (rest.type === "in") {
+    const referenceError = await validateStockDocumentReferences(
+      rest.poNumber,
+      rest.supplierBillNumber,
+    );
+    if (referenceError) {
+      res.status(400).json({ error: referenceError });
+      return;
+    }
+  }
 
   if (rest.type === "out") {
     const totalsByItemId = new Map<number, number>();

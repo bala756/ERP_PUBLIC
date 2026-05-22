@@ -187,7 +187,6 @@ function ReceiveFromPoDialog({ onClose }: { onClose: () => void }) {
       .map((l) => ({
         purchaseOrderLineId: l.lineId,
         receivedQty: l.receivedQty,
-        unitCost: l.unitCost,
       }));
     if (payloadLines.length === 0) {
       toast({ title: "Nothing to receive", description: "Enter received qty for at least one line.", variant: "destructive" });
@@ -271,11 +270,11 @@ function ReceiveFromPoDialog({ onClose }: { onClose: () => void }) {
                         <TableCell className="text-right">
                           <Input
                             type="number"
-                            min="0"
-                            step="0.01"
                             value={l.unitCost}
-                            onChange={(e) => updateLine(i, { unitCost: Number(e.target.value) })}
-                            className="text-right"
+                            readOnly
+                            className="text-right bg-muted"
+                            tabIndex={-1}
+                            data-testid={`input-receive-unit-cost-${l.lineId}`}
                           />
                         </TableCell>
                         <TableCell className="text-right">
