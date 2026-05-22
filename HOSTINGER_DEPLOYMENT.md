@@ -11,7 +11,7 @@ This repository builds as one Node application:
 Use these settings for the Hostinger Node.js application connected to GitHub.
 
 ```text
-Package manager: pnpm 11.2.2
+Package manager: pnpm
 Node version: 20 or newer
 Install command: corepack enable && pnpm install --frozen-lockfile
 Build command: pnpm run build
